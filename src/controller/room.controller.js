@@ -44,6 +44,7 @@ class Room {
       balance,
       isReady: isCreator ? true : false,
       ws: userInfo.ws,
+      remain: 0,
     };
     player.ws.on("close", () => {
       const index = this.playerList.findIndex((item) => item.id === player.id);
@@ -78,60 +79,44 @@ class Room {
           },
         })
       );
-      player.ws.on("message", (data) => {
-        data = JSON.parse(data);
-        if (data.key === "start-game") {
-          if (this.playerList.length < this.max) {
-            player.ws.send(
-              JSON.stringify({
-                code: 200,
-                data: {
-                  type: "notify",
-                  notifyType: "warning",
-                  msg: "房间人数未满",
-                },
-              })
-            );
-          } else if (!this.playerList.every((i) => i.isReady)) {
-            player.ws.send(
-              JSON.stringify({
-                code: 200,
-                data: {
-                  type: "notify",
-                  notifyType: "warning",
-                  msg: "有玩家未准备",
-                },
-              })
-            );
-          } else {
-            this.startGame();
-          }
+    }
+    player.ws.on("message", (data) => {
+      data = JSON.parse(data);
+      // 房主开始游戏
+      if (data.key === "start-game" && isCreator) {
+        if (this.playerList.length < this.max) {
+          player.ws.send(
+            JSON.stringify({
+              code: 200,
+              data: {
+                type: "notify",
+                notifyType: "warning",
+                msg: "房间人数未满",
+              },
+            })
+          );
+        } else if (!this.playerList.every((i) => i.isReady)) {
+          player.ws.send(
+            JSON.stringify({
+              code: 200,
+              data: {
+                type: "notify",
+                notifyType: "warning",
+                msg: "有玩家未准备",
+              },
+            })
+          );
+        } else {
+          this.startGame();
         }
-        //
-        else if (data.key === "follow-bet") {
-          this.game.followBet();
-        }
-        //
-        else if (data.key === "add-bet") {
-          this.game.addBet();
-        }
-        //
-        else if (data.key === "abandon-bet") {
-          this.game.abandonBet();
-        }
-        //
-        else if (data.key === "show-pocker") {
-          this.game.showPocker();
-        }
-      });
-    } else {
-      player.ws.on("message", (data) => {
-        data = JSON.parse(data);
-        player.isReady = data.isReady;
+      }
+      // 切换准备状态
+      else if (data.key === "toggle-is-ready") {
+        player.isReady = !player.isReady;
         this.chattingRecords.push({
           type: "system",
           title: "系统消息",
-          content: player.name + (data.isReady ? "已准备" : "取消了准备"),
+          content: player.name + (player.isReady ? "已准备" : "取消了准备"),
           time: new Date().getTime(),
         });
         player.ws.send(
@@ -144,8 +129,25 @@ class Room {
           })
         );
         this.updatePlayerState();
-      });
-    }
+      }
+      // 跟注
+      else if (data.key === "follow-bet") {
+        this.game.followBet();
+      }
+      // 下注
+      else if (data.key === "add-bet") {
+        this.game.addBet();
+      }
+      // 放弃
+      else if (data.key === "abandon-bet") {
+        this.game.abandonBet();
+      }
+      // 看牌
+      else if (data.key === "show-pocker") {
+        this.game.showPocker();
+        this.updateGameData();
+      }
+    });
   }
   updatePlayerState() {
     this.playerList.forEach((player) => {
@@ -217,14 +219,63 @@ class Room {
           code: 200,
           data: {
             type: "update-game-data",
-            self: this.game.players[i],
-            other: this.game.players.filter((_, j) => j !== i),
+            self: {
+              id: this.game.players[i].id,
+              name: this.game.players[i].name,
+              chip: this.game.players[i].chip,
+              balance: this.game.players[i].balance,
+              isBlind: this.game.players[i].isBlind,
+              cards: this.game.players[i].isBlind ? this.game.players[i].cards : [],
+            },
+            other: this.game.players
+              .filter((_, j) => j !== i)
+              .map((j) => {
+                return {
+                  id: j.id,
+                  name: j.name,
+                  chip: j.chip,
+                  balance: j.balance,
+                  isBlind: j.isBlind,
+                };
+              }),
           },
         })
       );
     });
-    // const winner = game.computeWinner();
-    // message.success(`胜利者是${winner.name}`);
+    this.updateGameData();
+  }
+
+  updateGameData() {
+    this.playerList.forEach((player, i) => {
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "update-game-data",
+            self: {
+              id: this.game.players[i].id,
+              name: this.game.players[i].name,
+              chip: this.game.players[i].chip,
+              balance: this.game.players[i].balance,
+              isBlind: this.game.players[i].isBlind,
+              cards: this.game.players[i].isBlind ? [] : this.game.players[i].cards,
+              remain: this.game.players[i].remain,
+            },
+            other: this.game.players
+              .filter((_, j) => j !== i)
+              .map((j) => {
+                return {
+                  id: j.id,
+                  name: j.name,
+                  chip: j.chip,
+                  balance: j.balance,
+                  isBlind: j.isBlind,
+                };
+              }),
+          },
+        })
+      );
+    });
   }
 }
 class RoomController {

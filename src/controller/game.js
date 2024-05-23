@@ -114,7 +114,7 @@ class Game {
       const cards = [];
       for (let j = 1; j <= 3; j++) cards.push(this.randomCard());
       const { score, type } = this.computeScore(cards);
-      return {
+      const data = {
         id: player.id,
         name: player.name,
         cards,
@@ -123,10 +123,15 @@ class Game {
         cardsType: type, // 牌型
         chip: minChip, // 下注的筹码
         balance: player.balance,
+        ws: player.ws,
       };
+      Object.defineProperty(data, "ws", {
+        enumerable: false,
+      });
+      return data;
     });
     this.currentPlayerIndex = Math.floor(Math.random() * this.playerNum);
-
+    this.countdownTimer(this.players[this.currentPlayerIndex]);
     return this.players;
     // for (let i = 0; i < this.players; i++) {
     //   const cards = [];
@@ -152,32 +157,53 @@ class Game {
     return winner;
   }
 
-  // 游戏操作逻辑
+  // 看牌
   showPocker() {
-    //
+    const player = this.players[this.currentPlayerIndex];
+    player.isBlind = false;
+    clearInterval(this.timer);
+    player.remain = -1;
+    this.timer = undefined;
+    this.countdownTimer(player);
   }
+
+  // 下注
   addBet() {}
+
+  // 跟注
   followBet() {}
+
+  // 放弃
   abandonBet() {}
+
+  // 切换用户回合
   togglePlayer() {
     if (this.currentPlayerIndex === this.playerNum - 1) this.currentPlayerIndex = 0;
     else this.currentPlayerIndex++;
   }
-  countdownTimer() {
-    let remain = 30;
+
+  // 倒计时
+  countdownTimer(curPlayer) {
+    curPlayer.remain = 30;
     this.timer = setInterval(() => {
+      if (curPlayer.remain < 0) {
+        clearInterval(this.timer);
+        this.timer = undefined;
+        curPlayer.remain = -1;
+      }
       this.players.forEach((player) => {
         player.ws.send(
           JSON.stringify({
             code: 200,
             data: {
               type: "countdown",
-              remain: remain--,
-              userId: player.id,
+              remain: curPlayer.remain,
+              userId: curPlayer.id,
             },
           })
         );
       });
+      curPlayer.remain--;
     }, 1000);
   }
 }
