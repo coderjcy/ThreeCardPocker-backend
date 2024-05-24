@@ -80,6 +80,85 @@ class Room {
         })
       );
     }
+    // player.ws.on("message", (data) => {
+    //   data = JSON.parse(data);
+    //   // 房主开始游戏
+    //   if (data.key === "start-game" && isCreator) {
+    //     if (this.playerList.length < this.max) {
+    //       player.ws.send(
+    //         JSON.stringify({
+    //           code: 200,
+    //           data: {
+    //             type: "notify",
+    //             notifyType: "warning",
+    //             msg: "房间人数未满",
+    //           },
+    //         })
+    //       );
+    //     } else if (!this.playerList.every((i) => i.isReady)) {
+    //       player.ws.send(
+    //         JSON.stringify({
+    //           code: 200,
+    //           data: {
+    //             type: "notify",
+    //             notifyType: "warning",
+    //             msg: "有玩家未准备",
+    //           },
+    //         })
+    //       );
+    //     } else {
+    //       this.startGame();
+    //     }
+    //   }
+    //   // 切换准备状态
+    //   else if (data.key === "toggle-is-ready") {
+    //     player.isReady = !player.isReady;
+    //     this.chattingRecords.push({
+    //       type: "system",
+    //       title: "系统消息",
+    //       content: player.name + (player.isReady ? "已准备" : "取消了准备"),
+    //       time: new Date().getTime(),
+    //     });
+    //     player.ws.send(
+    //       JSON.stringify({
+    //         code: 200,
+    //         data: {
+    //           type: "toggle-is-ready",
+    //           isReady: player.isReady,
+    //         },
+    //       })
+    //     );
+    //     this.updatePlayerState();
+    //   }
+    //   // 跟注
+    //   else if (data.key === "follow-bet") {
+    //     this.game.followBet();
+    //     this.updateGameData();
+    //   }
+    //   // 下注
+    //   else if (data.key === "add-bet") {
+    //     this.game.addBet();
+    //     this.updateGameData();
+    //   }
+    //   // 放弃
+    //   else if (data.key === "abandon-bet") {
+    //     this.game.abandonBet();
+    //     this.updateGameData();
+    //   }
+    //   // 比牌
+    //   else if (data.key === "compare-pocker") {
+    //     this.game.abandonBet();
+    //     this.updateGameData();
+    //   }
+    //   // 看牌
+    //   else if (data.key === "show-pocker") {
+    //     this.game.showPocker();
+    //     this.updateGameData();
+    //   }
+    // });
+    this.handleMessage(player);
+  }
+  handleMessage(player) {
     player.ws.on("message", (data) => {
       data = JSON.parse(data);
       // 房主开始游戏
@@ -133,14 +212,22 @@ class Room {
       // 跟注
       else if (data.key === "follow-bet") {
         this.game.followBet();
+        this.updateGameData();
       }
       // 下注
       else if (data.key === "add-bet") {
-        this.game.addBet();
+        this.game.addBet(data.chip);
+        this.updateGameData();
       }
       // 放弃
       else if (data.key === "abandon-bet") {
         this.game.abandonBet();
+        this.updateGameData();
+      }
+      // 比牌
+      else if (data.key === "compare-pocker") {
+        this.game.abandonBet();
+        this.updateGameData();
       }
       // 看牌
       else if (data.key === "show-pocker") {
@@ -244,7 +331,6 @@ class Room {
     });
     this.updateGameData();
   }
-
   updateGameData() {
     this.playerList.forEach((player, i) => {
       player.ws.send(
@@ -329,6 +415,8 @@ class RoomController {
           message: errorTypes.ROOM_DOSE_NOT_EXISTS,
         })
       );
+    if (roomInfo.playerList.length === roomInfo.max) 1;
+
     roomInfo.addPlayer(userInfo);
   }
 }

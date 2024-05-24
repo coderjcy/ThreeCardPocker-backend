@@ -10,7 +10,7 @@ const THINK_TIME = 1000 * 30;
 // 总共的牌数
 const TOTAL = 13 * 4;
 const LABELS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
-const minChip = 1;
+
 class Game {
   constructor() {
     this.playerNum = 0;
@@ -18,6 +18,10 @@ class Game {
     this.players = [];
     this.deck = [];
     this.timer = undefined;
+    this.minChip = 1; // 底注
+    this.chipPool = 0; // 筹码池
+    this.chipMax = 20; // 单注上限
+    this.currentChipMin = 1; // 当前最小可下注筹码
     for (const index in LABELS)
       for (const key in SUIT)
         this.deck.push({
@@ -27,12 +31,40 @@ class Game {
           value: +index,
         });
   }
-
+  // 开始游戏
+  start(playerList) {
+    this.playerNum = playerList.length;
+    this.players = playerList.map((player) => {
+      const cards = [];
+      for (let j = 1; j <= 3; j++) cards.push(this.randomCard());
+      const { score, type } = this.computeScore(cards);
+      const data = {
+        id: player.id,
+        name: player.name,
+        cards,
+        score, // 牌型对应分数
+        isBlind: true, // 是否看牌
+        isAbandon: false, // 是否放弃
+        cardsType: type, // 牌型
+        chip: this.minChip, // 下注的筹码
+        balance: player.balance,
+        ws: player.ws,
+      };
+      Object.defineProperty(data, "ws", {
+        enumerable: false,
+      });
+      return data;
+    });
+    this.currentPlayerIndex = Math.floor(Math.random() * this.playerNum);
+    this.countdownTimer(this.players[this.currentPlayerIndex]);
+  }
+  // 随机抽取一张牌
   randomCard() {
     const index = Math.floor(Math.random() * this.deck.length);
     return this.deck.splice(index, 1)[0];
   }
 
+  // 计算牌型对应的分数
   computeScore(cards) {
     cards.sort((a, b) => LABELS.indexOf(a.label) - LABELS.indexOf(b.label));
     let score = 0;
@@ -108,48 +140,8 @@ class Game {
       type,
     };
   }
-  start(playerList) {
-    this.playerNum = playerList.length;
-    this.players = playerList.map((player) => {
-      const cards = [];
-      for (let j = 1; j <= 3; j++) cards.push(this.randomCard());
-      const { score, type } = this.computeScore(cards);
-      const data = {
-        id: player.id,
-        name: player.name,
-        cards,
-        score, // 牌型对应分数
-        isBlind: true, // 是否看牌
-        cardsType: type, // 牌型
-        chip: minChip, // 下注的筹码
-        balance: player.balance,
-        ws: player.ws,
-      };
-      Object.defineProperty(data, "ws", {
-        enumerable: false,
-      });
-      return data;
-    });
-    this.currentPlayerIndex = Math.floor(Math.random() * this.playerNum);
-    this.countdownTimer(this.players[this.currentPlayerIndex]);
-    return this.players;
-    // for (let i = 0; i < this.players; i++) {
-    //   const cards = [];
-    //   for (let j = 1; j <= 3; j++) cards.push(this.randomCard());
-    //   const { score, type } = this.computeScore(cards);
-    //   const player = {
-    //     id: i,
-    //     name: `player${i + 1}`,
-    //     cardsType: type,
-    //     cards,
-    //     score,
-    //     isBlind: true,
-    //     chip: minChip,
-    //   };
-    //   this.players.push(player);
-    // }
-  }
 
+  // 计算赢家
   computeWinner() {
     let winner = this.players[0];
     for (let i = 1; i < this.players.length; i++)
@@ -168,18 +160,31 @@ class Game {
   }
 
   // 下注
-  addBet() {}
+  addBet(chip) {
+    const player = this.players[this.currentPlayerIndex];
+    player.chip += chip;
+    this.chipPool += chip;
+    this.currentChipMin = chip;
+  }
 
   // 跟注
-  followBet() {}
+  followBet() {
+    const player = this.players[this.currentPlayerIndex];
+    player.chip += chip;
+    this.chipPool += chip;
+  }
 
   // 放弃
   abandonBet() {}
+
+  // 比牌
+  comparePocker() {}
 
   // 切换用户回合
   togglePlayer() {
     if (this.currentPlayerIndex === this.playerNum - 1) this.currentPlayerIndex = 0;
     else this.currentPlayerIndex++;
+    this.countdownTimer(this.players[this.currentPlayerIndex]);
   }
 
   // 倒计时
@@ -190,6 +195,7 @@ class Game {
         clearInterval(this.timer);
         this.timer = undefined;
         curPlayer.remain = -1;
+        this.togglePlayer();
       }
       this.players.forEach((player) => {
         player.ws.send(
@@ -209,3 +215,11 @@ class Game {
 }
 
 export default Game;
+
+// 1. 游戏开始时，每位玩家向筹码池中投注“”约定好”的基础筹码
+// 2. 第一名玩家可以选择“看牌”下注，或者“不看牌”下注
+//    2.1 当玩家选择看牌下注后，之后的玩家可以选择相同的筹码跟注，或者下注
+//    2.2 当玩家选择不看牌下注后，之后的玩家可以选择不看牌跟注，或者看牌并且加倍跟注，或者下注
+// 3. 跟注和下注需要在创建游戏房间时设置上限
+// 4. 游戏结束后，将公开全部玩家的牌
+// 5. 加注需要加入比上家单注更多的筹码，并且加注后不能超过单注封顶
