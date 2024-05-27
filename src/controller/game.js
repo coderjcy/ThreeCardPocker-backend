@@ -1,3 +1,5 @@
+import userService from "../service/user.service";
+
 const SUIT = {
   diamonds: 0, // 方块
   clubs: 1, // 梅花
@@ -184,7 +186,7 @@ class Game {
   // 弃牌
   abandonBet() {
     this.players[this.currentPlayerIndex].isAbandon = true;
-    this.togglePlayer();
+    this.checkGameOver();
   }
   // 判断游戏是否结束
   checkGameOver() {
@@ -195,8 +197,19 @@ class Game {
       // 取消倒计时
       this.cancelCountdownTimer();
       // 结算筹码
-
       const winner = existPlayer[0];
+      this.players.forEach((player) => {
+        // 赢家
+        if (player.id === winner.id) {
+          userService.updateBalanceByUserId(
+            player.id,
+            player.balance - player.chip + this.chipPool
+          );
+        }
+        // 败家
+        else userService.updateBalanceByUserId(player.id, player.balance - player.chip);
+      });
+      // 发送游戏结束消息
     } else {
       this.togglePlayer();
     }
