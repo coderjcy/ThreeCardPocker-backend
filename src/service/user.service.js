@@ -5,8 +5,7 @@ class UserService {
     const statement = "SELECT * FROM user WHERE id = ?;";
     const res = await connection.execute(statement, [userId]);
     const friendIds = res[0][0].friends?.split(",") || [];
-    console.log(`output->friendIds`, friendIds);
-    const statement2 = "SELECT nickname,id,score FROM user WHERE id = ?;";
+    const statement2 = "SELECT nickname,id FROM user WHERE id = ?;";
 
     const friendList = [];
     for (const friendId of friendIds) {
@@ -22,9 +21,15 @@ class UserService {
     return res[0][0];
   }
   async queryBalanceById(id) {
-    const statement = "SELECT score FROM user WHERE id = ?;";
+    const statement = "SELECT balance FROM user WHERE id = ?;";
     const res = await connection.execute(statement, [id]);
-    return res[0][0].score;
+    return res[0][0].balance;
+  }
+
+  async updateBalanceByUserId(userId, balance) {
+    const statement = `UPDATE user SET balance = ? WHERE id = ?;`;
+    const res = await connection.execute(statement, [balance, userId]);
+    return res[0][0];
   }
 }
 

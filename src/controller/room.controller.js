@@ -5,11 +5,11 @@ const roomList = [];
 class Room {
   constructor(creatorInfo) {
     this.id = creatorInfo.id + "_" + Date.now();
-    this.name = creatorInfo.username + "的房间";
+    this.name = creatorInfo.nickname + "的房间";
     this.creatorId = creatorInfo.id;
-    this.creatorName = creatorInfo.username;
+    this.creatorName = creatorInfo.nickname;
     this.playerList = [];
-    this.state = "waiting"; // wating / playing
+    this.state = "waiting"; // waiting / playing
     this.max = 3;
     this.chattingRecords = new Proxy([], {
       get: (target, prop) => {
@@ -32,7 +32,7 @@ class Room {
         }
         return target[prop];
       },
-    }); // 系统消息 / 用户消息
+    });
     this.game = null;
   }
   async addPlayer(userInfo) {
@@ -40,11 +40,12 @@ class Room {
     const balance = await userService.queryBalanceById(userInfo.id);
     const player = {
       id: userInfo.id,
-      name: userInfo.username,
+      name: userInfo.nickname,
       balance,
       isReady: isCreator ? true : false,
       ws: userInfo.ws,
-      remain: 0,
+
+      // state: "ready", // ready/pending/abandon
     };
     player.ws.on("close", () => {
       const index = this.playerList.findIndex((item) => item.id === player.id);
@@ -80,85 +81,9 @@ class Room {
         })
       );
     }
-    // player.ws.on("message", (data) => {
-    //   data = JSON.parse(data);
-    //   // 房主开始游戏
-    //   if (data.key === "start-game" && isCreator) {
-    //     if (this.playerList.length < this.max) {
-    //       player.ws.send(
-    //         JSON.stringify({
-    //           code: 200,
-    //           data: {
-    //             type: "notify",
-    //             notifyType: "warning",
-    //             msg: "房间人数未满",
-    //           },
-    //         })
-    //       );
-    //     } else if (!this.playerList.every((i) => i.isReady)) {
-    //       player.ws.send(
-    //         JSON.stringify({
-    //           code: 200,
-    //           data: {
-    //             type: "notify",
-    //             notifyType: "warning",
-    //             msg: "有玩家未准备",
-    //           },
-    //         })
-    //       );
-    //     } else {
-    //       this.startGame();
-    //     }
-    //   }
-    //   // 切换准备状态
-    //   else if (data.key === "toggle-is-ready") {
-    //     player.isReady = !player.isReady;
-    //     this.chattingRecords.push({
-    //       type: "system",
-    //       title: "系统消息",
-    //       content: player.name + (player.isReady ? "已准备" : "取消了准备"),
-    //       time: new Date().getTime(),
-    //     });
-    //     player.ws.send(
-    //       JSON.stringify({
-    //         code: 200,
-    //         data: {
-    //           type: "toggle-is-ready",
-    //           isReady: player.isReady,
-    //         },
-    //       })
-    //     );
-    //     this.updatePlayerState();
-    //   }
-    //   // 跟注
-    //   else if (data.key === "follow-bet") {
-    //     this.game.followBet();
-    //     this.updateGameData();
-    //   }
-    //   // 下注
-    //   else if (data.key === "add-bet") {
-    //     this.game.addBet();
-    //     this.updateGameData();
-    //   }
-    //   // 放弃
-    //   else if (data.key === "abandon-bet") {
-    //     this.game.abandonBet();
-    //     this.updateGameData();
-    //   }
-    //   // 比牌
-    //   else if (data.key === "compare-pocker") {
-    //     this.game.abandonBet();
-    //     this.updateGameData();
-    //   }
-    //   // 看牌
-    //   else if (data.key === "show-pocker") {
-    //     this.game.showPocker();
-    //     this.updateGameData();
-    //   }
-    // });
-    this.handleMessage(player);
+    this.handleMessage(player, isCreator);
   }
-  handleMessage(player) {
+  handleMessage(player, isCreator) {
     player.ws.on("message", (data) => {
       data = JSON.parse(data);
       // 房主开始游戏
@@ -209,6 +134,18 @@ class Room {
         );
         this.updatePlayerState();
       }
+      // 玩家发言
+      else if (data.key === "player-message") {
+        player.isReady = !player.isReady;
+        this.chattingRecords.push({
+          type: "player",
+          title: player.name,
+          content: data.data,
+          time: new Date().getTime(),
+        });
+
+        this.updatePlayerState();
+      }
       // 跟注
       else if (data.key === "follow-bet") {
         this.game.followBet();
@@ -216,7 +153,7 @@ class Room {
       }
       // 下注
       else if (data.key === "add-bet") {
-        this.game.addBet(data.chip);
+        this.game.addBet();
         this.updateGameData();
       }
       // 放弃
@@ -226,7 +163,21 @@ class Room {
       }
       // 比牌
       else if (data.key === "compare-pocker") {
-        this.game.abandonBet();
+        const competitor = this.game.comparePocker(data.playerId);
+        player.ws.send(
+          JSON.stringify({
+            code: 200,
+            data: {
+              type: "compare-pocker",
+              competitor: {
+                id: competitor.id,
+                cards: competitor.cards,
+                score: competitor.score,
+                cardsType: competitor.cardsType,
+              },
+            },
+          })
+        );
         this.updateGameData();
       }
       // 看牌
@@ -258,13 +209,7 @@ class Room {
       player.ws.send(leavePlayer.name + "离开了房间");
     });
   }
-  changePlayerReadyState(userInfo, isReady) {
-    const player = this.playerList.find((i) => i.id === userInfo.id);
-    player.isReady = isReady;
-    this.playerList.forEach((player) => {
-      player.ws.send(leavePlayer.name + isReady ? "已准备" : "取消了准备");
-    });
-  }
+
   notify(type = "notify", message, data) {
     this.playerList.forEach((player) => {
       player.ws.send(
@@ -344,8 +289,8 @@ class Room {
               chip: this.game.players[i].chip,
               balance: this.game.players[i].balance,
               isBlind: this.game.players[i].isBlind,
+              isAbandon: this.game.players[i].isAbandon,
               cards: this.game.players[i].isBlind ? [] : this.game.players[i].cards,
-              remain: this.game.players[i].remain,
             },
             other: this.game.players
               .filter((_, j) => j !== i)
@@ -356,6 +301,7 @@ class Room {
                   chip: j.chip,
                   balance: j.balance,
                   isBlind: j.isBlind,
+                  isAbandon: j.isAbandon,
                 };
               }),
           },

@@ -5,7 +5,6 @@ const roomRouter = new KoaRouter({ prefix: "/room" });
 
 roomRouter.get("/list", verifyAuth, roomController.list);
 roomRouter.post("/create", verifyAuth, roomController.create);
-
 roomRouter.get("/:roomId", verifyAuth, roomController.list);
 
 export default roomRouter;

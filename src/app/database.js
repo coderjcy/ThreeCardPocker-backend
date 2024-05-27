@@ -13,7 +13,6 @@ connectionPool.getConnection((err, connection) => {
 
   connection.connect((err) => {
     if (err) return console.log("和数据交互失败", err);
-    console.log("连接数据库成功");
   });
 });
 const connection = connectionPool.promise();

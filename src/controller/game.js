@@ -14,7 +14,8 @@ const LABELS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"
 class Game {
   constructor() {
     this.playerNum = 0;
-    this.currentPlayerIndex = 0;
+    this.currentPlayerIndex = -1;
+    this.prePlayerIndex = -1;
     this.players = [];
     this.deck = [];
     this.timer = undefined;
@@ -47,7 +48,7 @@ class Game {
         isAbandon: false, // 是否放弃
         cardsType: type, // 牌型
         chip: this.minChip, // 下注的筹码
-        balance: player.balance,
+        balance: player.balance, // 剩余的筹码
         ws: player.ws,
       };
       Object.defineProperty(data, "ws", {
@@ -159,44 +160,86 @@ class Game {
     this.countdownTimer(player);
   }
 
-  // 下注
-  addBet(chip) {
+  // 加注
+  addBet() {
+    const prePlayer = this.players[this.prePlayerIndex];
     const player = this.players[this.currentPlayerIndex];
+    const chip =
+      prePlayer?.isBlind && !player.isBlind ? this.currentChipMin * 2 + 5 : this.currentChipMin + 5;
     player.chip += chip;
     this.chipPool += chip;
     this.currentChipMin = chip;
+    this.togglePlayer();
   }
 
   // 跟注
   followBet() {
+    const prePlayer = this.players[this.prePlayerIndex];
     const player = this.players[this.currentPlayerIndex];
-    player.chip += chip;
-    this.chipPool += chip;
+    if (prePlayer?.isBlind && !player.isBlind) this.currentChipMin = this.currentChipMin * 2;
+    player.chip += this.currentChipMin;
+    this.chipPool += this.currentChipMin;
+    this.togglePlayer();
   }
 
   // 放弃
-  abandonBet() {}
+  abandonBet() {
+    this.players[this.currentPlayerIndex].isAbandon = true;
+    this.togglePlayer();
+  }
+  // 判断游戏是否结束
+  checkGameOver() {
+    let existPlayer = [];
+    this.players.forEach((player) => {
+      if (!player.isAbandon) existPlayer(player);
+    });
+    if (existPlayer.length === 1) {
+      const winner = existPlayer[0];
+    }
+  }
 
   // 比牌
-  comparePocker() {}
+  comparePocker(id) {
+    const player = this.players[this.currentPlayerIndex];
+    const competitor = this.players.find((i) => i.id === id);
+    // player.chip = player.chip * 2;
+    // this.chipPool += player.chip;
+    if (player.score > competitor.score) {
+      // player 赢
+      competitor.isAbandon = true;
+    } else {
+      // player 输
+      player.isAbandon = true;
+    }
+    this.togglePlayer();
+
+    return competitor;
+    // this.checkGameOver();
+  }
 
   // 切换用户回合
   togglePlayer() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+      this.players[this.currentPlayerIndex].remain = -1;
+    }
+    if (!this.players[this.currentPlayerIndex].isAbandon) {
+      this.prePlayerIndex = this.currentPlayerIndex;
+    }
     if (this.currentPlayerIndex === this.playerNum - 1) this.currentPlayerIndex = 0;
     else this.currentPlayerIndex++;
-    this.countdownTimer(this.players[this.currentPlayerIndex]);
+    const player = this.players[this.currentPlayerIndex];
+    if (player.isAbandon) this.togglePlayer();
+    else this.countdownTimer(player);
   }
 
   // 倒计时
   countdownTimer(curPlayer) {
     curPlayer.remain = 30;
     this.timer = setInterval(() => {
-      if (curPlayer.remain < 0) {
-        clearInterval(this.timer);
-        this.timer = undefined;
-        curPlayer.remain = -1;
-        this.togglePlayer();
-      }
+      if (curPlayer.remain < 0) this.togglePlayer();
+
       this.players.forEach((player) => {
         player.ws.send(
           JSON.stringify({
