@@ -57,7 +57,7 @@ class Game {
       return data;
     });
     this.currentPlayerIndex = Math.floor(Math.random() * this.playerNum);
-    this.countdownTimer(this.players[this.currentPlayerIndex]);
+    this.startCountdownTimer(this.players[this.currentPlayerIndex]);
   }
   // 随机抽取一张牌
   randomCard() {
@@ -154,10 +154,8 @@ class Game {
   showPocker() {
     const player = this.players[this.currentPlayerIndex];
     player.isBlind = false;
-    clearInterval(this.timer);
-    player.remain = -1;
-    this.timer = undefined;
-    this.countdownTimer(player);
+    this.cancelCountdownTimer();
+    this.startCountdownTimer(player);
   }
 
   // 加注
@@ -166,6 +164,7 @@ class Game {
     const player = this.players[this.currentPlayerIndex];
     const chip =
       prePlayer?.isBlind && !player.isBlind ? this.currentChipMin * 2 + 5 : this.currentChipMin + 5;
+
     player.chip += chip;
     this.chipPool += chip;
     this.currentChipMin = chip;
@@ -182,19 +181,24 @@ class Game {
     this.togglePlayer();
   }
 
-  // 放弃
+  // 弃牌
   abandonBet() {
     this.players[this.currentPlayerIndex].isAbandon = true;
     this.togglePlayer();
   }
   // 判断游戏是否结束
   checkGameOver() {
-    let existPlayer = [];
-    this.players.forEach((player) => {
-      if (!player.isAbandon) existPlayer(player);
-    });
+    const existPlayer = this.players.filter((i) => !i.isAbandon);
+
+    // 如果只剩余一人,表示游戏结束
     if (existPlayer.length === 1) {
+      // 取消倒计时
+      this.cancelCountdownTimer();
+      // 结算筹码
+
       const winner = existPlayer[0];
+    } else {
+      this.togglePlayer();
     }
   }
 
@@ -211,35 +215,34 @@ class Game {
       // player 输
       player.isAbandon = true;
     }
-    this.togglePlayer();
+    this.checkGameOver();
 
     return competitor;
-    // this.checkGameOver();
   }
 
   // 切换用户回合
   togglePlayer() {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = undefined;
-      this.players[this.currentPlayerIndex].remain = -1;
-    }
+    this.cancelCountdownTimer();
+    // 如果当前玩家没有弃牌，把prePlayerIndex设为currentPlayerIndex
     if (!this.players[this.currentPlayerIndex].isAbandon) {
       this.prePlayerIndex = this.currentPlayerIndex;
     }
+    // 当前玩家是最后一个人，则把currentPlayerIndex设为0
     if (this.currentPlayerIndex === this.playerNum - 1) this.currentPlayerIndex = 0;
+    // 否则，把currentPlayerIndex加1
     else this.currentPlayerIndex++;
     const player = this.players[this.currentPlayerIndex];
+    // 如果下个玩家是弃牌状态，则继续切换玩家
     if (player.isAbandon) this.togglePlayer();
-    else this.countdownTimer(player);
+    // 否则开始倒计时
+    else this.startCountdownTimer(player);
   }
 
-  // 倒计时
-  countdownTimer(curPlayer) {
+  // 开始倒计时
+  startCountdownTimer(curPlayer) {
     curPlayer.remain = 30;
     this.timer = setInterval(() => {
-      if (curPlayer.remain < 0) this.togglePlayer();
-
+      if (curPlayer.remain < 0) this.abandonBet();
       this.players.forEach((player) => {
         player.ws.send(
           JSON.stringify({
@@ -254,6 +257,13 @@ class Game {
       });
       curPlayer.remain--;
     }, 1000);
+  }
+  // 取消倒计时
+  cancelCountdownTimer() {
+    if (!this.timer) return;
+    clearInterval(this.timer);
+    this.timer = undefined;
+    this.players[this.currentPlayerIndex].remain = -1;
   }
 }
 

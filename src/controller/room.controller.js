@@ -283,6 +283,8 @@ class Room {
           code: 200,
           data: {
             type: "update-game-data",
+            chipPool: this.game.chipPool,
+            currentChipMin: this.game.currentChipMin,
             self: {
               id: this.game.players[i].id,
               name: this.game.players[i].name,
