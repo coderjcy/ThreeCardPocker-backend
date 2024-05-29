@@ -20,6 +20,13 @@ class UserService {
     const res = await connection.execute(statement, [username]);
     return res[0][0];
   }
+
+  async queryUserInfo(key, value) {
+    const statement = `SELECT * FROM user WHERE ${key} = ?;`;
+    const res = await connection.execute(statement, [value]);
+    return res[0][0];
+  }
+
   async queryBalanceById(id) {
     const statement = "SELECT balance FROM user WHERE id = ?;";
     const res = await connection.execute(statement, [id]);

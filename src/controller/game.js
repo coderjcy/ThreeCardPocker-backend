@@ -1,4 +1,4 @@
-import userService from "../service/user.service";
+import userService from "../service/user.service.js";
 
 const SUIT = {
   diamonds: 0, // 方块
@@ -44,6 +44,7 @@ class Game {
       const data = {
         id: player.id,
         name: player.name,
+        avatar: player.avatar,
         cards,
         score, // 牌型对应分数
         isBlind: true, // 是否看牌
@@ -289,3 +290,5 @@ export default Game;
 // 3. 跟注和下注需要在创建游戏房间时设置上限
 // 4. 游戏结束后，将公开全部玩家的牌
 // 5. 加注需要加入比上家单注更多的筹码，并且加注后不能超过单注封顶
+
+// 创建房间时设置底注 单注封顶上限
