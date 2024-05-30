@@ -12,19 +12,33 @@ const THINK_TIME = 1000 * 30;
 // 总共的牌数
 const TOTAL = 13 * 4;
 const LABELS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
-
+const DEFAULT_CONFIG = {
+  playerNum: 3,
+  baseChip: 1,
+  roundCount: 10,
+};
 class Game {
-  constructor() {
-    this.playerNum = 0;
+  /**
+   *
+   * @param {{playerNum:number, baseChip:number, roundCount:number}} config
+   * @description
+   *  - playerNum: 玩家人数
+   *  - baseChip: 底注
+   *  - roundCount: 轮数
+   */
+  constructor(config = DEFAULT_CONFIG) {
+    this.playerNum = config.playerNum;
     this.currentPlayerIndex = -1;
     this.prePlayerIndex = -1;
     this.players = [];
     this.deck = [];
     this.timer = undefined;
-    this.minChip = 1; // 底注
+    this.baseChip = baseChip; // 底注
     this.chipPool = 0; // 筹码池
-    this.chipMax = 20; // 单注上限
-    this.currentChipMin = 1; // 当前最小可下注筹码
+    this.chipMax = 50; // 单注上限
+    this.currentChipMin = config.baseChip; // 当前最小可下注筹码
+    this.roundCount = config.roundCount * config.playerNum; // 轮数
+    this.currentRound = 1;
     for (const index in LABELS)
       for (const key in SUIT)
         this.deck.push({
@@ -50,7 +64,7 @@ class Game {
         isBlind: true, // 是否看牌
         isAbandon: false, // 是否放弃
         cardsType: type, // 牌型
-        chip: this.minChip, // 下注的筹码
+        chip: this.baseChip, // 下注的筹码
         balance: player.balance, // 剩余的筹码
         ws: player.ws,
       };
@@ -145,14 +159,6 @@ class Game {
     };
   }
 
-  // 计算赢家
-  computeWinner() {
-    let winner = this.players[0];
-    for (let i = 1; i < this.players.length; i++)
-      if (this.players[i].score > winner.score) winner = this.players[i];
-    return winner;
-  }
-
   // 看牌
   showPocker() {
     const player = this.players[this.currentPlayerIndex];
@@ -162,25 +168,91 @@ class Game {
   }
 
   // 加注
-  addBet() {
-    const prePlayer = this.players[this.prePlayerIndex];
+  addBet(chip) {
+    // 加注可选项 5 10 20 50
+    // 如果当前最低下注为1,则加注最少为5
+    // 如果当前最低下注为5,则加注最少为10
+    // 如果当前最低下注为10,则加注最少为20
+    // 如果当前最低下注为20,则加注最少为50
     const player = this.players[this.currentPlayerIndex];
-    const chip =
-      prePlayer?.isBlind && !player.isBlind ? this.currentChipMin * 2 + 5 : this.currentChipMin + 5;
-
+    const playerId = player.id;
     player.chip += chip;
     this.chipPool += chip;
     this.currentChipMin = chip;
+    this.players.forEach((player) => {
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "add-bet",
+            playerId,
+            chip,
+          },
+        })
+      );
+    });
     this.togglePlayer();
   }
+  // addBet(value) {
+  //   // 加注可选项 5 10 20 50
+  //   // 如果当前最低下注为1,则加注最少为5
+  //   // 如果当前最低下注为5,则加注最少为10
+  //   // 如果当前最低下注为10,则加注最少为20
+  //   // 如果当前最低下注为20,则加注最少为50
+  //   if (this.currentChipMin === 1) {
+  //   }
+  //   const prePlayer = this.players[this.prePlayerIndex];
+  //   const player = this.players[this.currentPlayerIndex];
+  //   const chip =
+  //     prePlayer?.isBlind && !player.isBlind ? this.currentChipMin * 2 + 5 : this.currentChipMin + 5;
+
+  //   player.chip += chip;
+  //   this.chipPool += chip;
+  //   this.currentChipMin = chip;
+  //   this.togglePlayer();
+  // }
 
   // 跟注
   followBet() {
     const prePlayer = this.players[this.prePlayerIndex];
     const player = this.players[this.currentPlayerIndex];
-    if (prePlayer?.isBlind && !player.isBlind) this.currentChipMin = this.currentChipMin * 2;
-    player.chip += this.currentChipMin;
-    this.chipPool += this.currentChipMin;
+    const playerId = player.id;
+
+    const isNeedDouble = prePlayer?.isBlind && !player.isBlind;
+    let chip = 0;
+    switch (this.currentChipMin) {
+      case 1:
+        chip = isNeedDouble ? 5 : 1;
+        break;
+      case 5:
+        chip = isNeedDouble ? 10 : 5;
+        break;
+      case 10:
+        chip = isNeedDouble ? 20 : 10;
+        break;
+      case 20:
+        chip = isNeedDouble ? 50 : 20;
+        break;
+      case 50:
+        chip = 50;
+        break;
+    }
+
+    player.chip += chip;
+    this.chipPool += chip;
+    // this.currentChipMin = value;
+    this.players.forEach((player) => {
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "add-bet",
+            playerId,
+            chip,
+          },
+        })
+      );
+    });
     this.togglePlayer();
   }
 
@@ -189,34 +261,11 @@ class Game {
     this.players[this.currentPlayerIndex].isAbandon = true;
     this.checkGameOver();
   }
-  // 判断游戏是否结束
-  checkGameOver() {
-    const existPlayer = this.players.filter((i) => !i.isAbandon);
 
-    // 如果只剩余一人,表示游戏结束
-    if (existPlayer.length === 1) {
-      // 取消倒计时
-      this.cancelCountdownTimer();
-      // 结算筹码
-      const winner = existPlayer[0];
-      this.players.forEach((player) => {
-        // 赢家
-        if (player.id === winner.id) {
-          userService.updateBalanceByUserId(
-            player.id,
-            player.balance - player.chip + this.chipPool
-          );
-        }
-        // 败家
-        else userService.updateBalanceByUserId(player.id, player.balance - player.chip);
-      });
-      // 发送游戏结束消息
-    } else {
-      this.togglePlayer();
-    }
-  }
-
-  // 比牌
+  /**
+   * @param  id 玩家id
+   * @description 玩家比牌
+   */
   comparePocker(id) {
     const player = this.players[this.currentPlayerIndex];
     const competitor = this.players.find((i) => i.id === id);
@@ -234,8 +283,101 @@ class Game {
     return competitor;
   }
 
-  // 切换用户回合
+  /**
+   * @description 判断游戏是否结束
+   */
+  checkGameOver() {
+    const existPlayer = this.players.filter((i) => !i.isAbandon);
+
+    // 如果只剩余一人,表示游戏结束
+    if (existPlayer.length === 1) {
+      this.cancelCountdownTimer();
+      this.settleAccounts();
+    } else {
+      this.togglePlayer();
+    }
+  }
+
+  /**
+   *
+   * @description 计算当前剩余用户的牌型分数最大的玩家
+   */
+  computeWinner() {
+    let winner = null;
+    this.players.forEach((player) => {
+      if (!player.isAbandon) return;
+      else if (!winner) winner = player;
+      else if (player.score > winner.score) {
+        winner.isAbandon = true;
+        winner = player;
+      }
+    });
+    this.settleAccounts();
+    return winner;
+  }
+
+  /**
+   * @description 结算玩家筹码，并且通知游戏结束
+   */
+  settleAccounts() {
+    this.players.forEach((player) => {
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "update-game-data",
+            chipPool: this.chipPool,
+            prePlayerId: this.players[this.prePlayerIndex]?.id,
+            self: {
+              id: this.players[i].id,
+              name: this.players[i].name,
+              chip: this.players[i].chip,
+              balance: this.players[i].balance,
+              isBlind: this.players[i].isBlind,
+              isAbandon: this.players[i].isAbandon,
+              cards: this.players[i].cards,
+              avatar: this.players[i].avatar,
+              cardsType: this.players[i].cardsType,
+            },
+            other: this.players
+              .filter((_, j) => j !== i)
+              .map((j) => {
+                return {
+                  id: j.id,
+                  name: j.name,
+                  chip: j.chip,
+                  balance: j.balance,
+                  isBlind: j.isBlind,
+                  isAbandon: j.isAbandon,
+                  avatar: j.avatar,
+                  cards: j.cards,
+                  cardsType: j.cardsType,
+                };
+              }),
+          },
+        })
+      );
+
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: { type: "toggle-room-state", state: "over" },
+        })
+      );
+      const balance = player.isAbandon
+        ? player.balance - player.chip
+        : player.balance + this.chipPool;
+      userService.updateBalanceByUserId(player.id, balance);
+    });
+  }
+
+  /**
+   * @description 切换用户回合
+   */
   togglePlayer() {
+    // 回合到达31后，游戏结束，当前剩余玩家中牌型分数最大者获得胜利
+    if (this.currentRound > 30) return this.computeWinner();
+    this.currentRound++;
     this.cancelCountdownTimer();
     // 如果当前玩家没有弃牌，把prePlayerIndex设为currentPlayerIndex
     if (!this.players[this.currentPlayerIndex].isAbandon) {
@@ -252,7 +394,9 @@ class Game {
     else this.startCountdownTimer(player);
   }
 
-  // 开始倒计时
+  /**
+   * @description  开始倒计时
+   */
   startCountdownTimer(curPlayer) {
     curPlayer.remain = 30;
     this.timer = setInterval(() => {
@@ -272,7 +416,11 @@ class Game {
       curPlayer.remain--;
     }, 1000);
   }
-  // 取消倒计时
+
+  /**
+   *
+   * @description 取消倒计时
+   */
   cancelCountdownTimer() {
     if (!this.timer) return;
     clearInterval(this.timer);
@@ -282,13 +430,3 @@ class Game {
 }
 
 export default Game;
-
-// 1. 游戏开始时，每位玩家向筹码池中投注“”约定好”的基础筹码
-// 2. 第一名玩家可以选择“看牌”下注，或者“不看牌”下注
-//    2.1 当玩家选择看牌下注后，之后的玩家可以选择相同的筹码跟注，或者下注
-//    2.2 当玩家选择不看牌下注后，之后的玩家可以选择不看牌跟注，或者看牌并且加倍跟注，或者下注
-// 3. 跟注和下注需要在创建游戏房间时设置上限
-// 4. 游戏结束后，将公开全部玩家的牌
-// 5. 加注需要加入比上家单注更多的筹码，并且加注后不能超过单注封顶
-
-// 创建房间时设置底注 单注封顶上限

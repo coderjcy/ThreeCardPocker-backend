@@ -12,6 +12,7 @@ class Room {
     this.state = "waiting"; // waiting / playing
     this.playerMax = 3; // 最大玩家数
     this.baseChip = 1; // 底注
+    this.roundCount = 10; // 轮数
     this.chattingRecords = new Proxy([], {
       get: (target, prop) => {
         const playerList = this.playerList;
@@ -36,6 +37,65 @@ class Room {
     });
     this.game = null;
   }
+  // 开始游戏
+  startGame() {
+    this.game = new Game({
+      playerNum: this.playerMax,
+      baseChip: this.baseChip,
+      roundCount: this.roundCount,
+    });
+    this.game.start(this.playerList);
+    this.playerList.forEach((player, i) => {
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "notify",
+            notifyType: "success",
+            msg: "游戏开始",
+          },
+        })
+      );
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "toggle-room-state",
+            state: "playing",
+          },
+        })
+      );
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "update-game-data",
+            self: {
+              id: this.game.players[i].id,
+              name: this.game.players[i].name,
+              chip: this.game.players[i].chip,
+              balance: this.game.players[i].balance,
+              isBlind: this.game.players[i].isBlind,
+              cards: this.game.players[i].isBlind ? this.game.players[i].cards : [],
+            },
+            other: this.game.players
+              .filter((_, j) => j !== i)
+              .map((j) => {
+                return {
+                  id: j.id,
+                  name: j.name,
+                  chip: j.chip,
+                  balance: j.balance,
+                  isBlind: j.isBlind,
+                };
+              }),
+          },
+        })
+      );
+    });
+    this.updateGameData();
+    this.state = "playing";
+  }
   async addPlayer(userInfo) {
     const isCreator = userInfo.id === this.creatorId;
     const { balance, avatar } = await userService.queryUserInfo("id", userInfo.id);
@@ -59,8 +119,7 @@ class Room {
           content: player.name + "离开了房间",
           time: new Date().getTime(),
         });
-        // this.updatePlayerState();
-        this.updatePlayerState2();
+        this.updatePlayerState();
       }
     });
 
@@ -72,8 +131,8 @@ class Room {
       content: player.name + "进入了房间",
       time: new Date().getTime(),
     });
-    // this.updatePlayerState();
-    this.updatePlayerState2();
+
+    this.updatePlayerState();
     if (isCreator) {
       userInfo.ws.send(
         JSON.stringify({
@@ -137,7 +196,7 @@ class Room {
           })
         );
         // this.updatePlayerState();
-        this.updatePlayerState2();
+        this.updatePlayerState();
       }
       // 玩家发言
       else if (data.key === "player-message") {
@@ -156,7 +215,7 @@ class Room {
       }
       // 下注
       else if (data.key === "add-bet") {
-        this.game.addBet();
+        this.game.addBet(data.chip);
         this.updateGameData();
       }
       // 放弃
@@ -190,24 +249,8 @@ class Room {
       }
     });
   }
+
   updatePlayerState() {
-    this.playerList.forEach((player) => {
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: {
-            type: "update-player-list",
-            playerList: this.playerList.map((i) => {
-              i.isSelf = i.id === player.id;
-              return i;
-            }),
-          },
-          message: "更新玩家状态",
-        })
-      );
-    });
-  }
-  updatePlayerState2() {
     this.playerList.forEach((player) => {
       player.ws.send(
         JSON.stringify({
@@ -232,6 +275,7 @@ class Room {
             type: "update-game-data",
             chipPool: this.game.chipPool,
             currentChipMin: this.game.currentChipMin,
+            prePlayerId: this.game.players[this.game.prePlayerIndex]?.id,
             self: {
               id: this.game.players[i].id,
               name: this.game.players[i].name,
@@ -279,61 +323,6 @@ class Room {
         })
       );
     });
-  }
-  startGame() {
-    // 如果
-    this.state = "playing";
-    this.game = new Game();
-    this.game.start(this.playerList);
-    this.playerList.forEach((player, i) => {
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: {
-            type: "notify",
-            notifyType: "success",
-            msg: "游戏开始",
-          },
-        })
-      );
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: {
-            type: "toggle-room-state",
-            state: "playing",
-          },
-        })
-      );
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: {
-            type: "update-game-data",
-            self: {
-              id: this.game.players[i].id,
-              name: this.game.players[i].name,
-              chip: this.game.players[i].chip,
-              balance: this.game.players[i].balance,
-              isBlind: this.game.players[i].isBlind,
-              cards: this.game.players[i].isBlind ? this.game.players[i].cards : [],
-            },
-            other: this.game.players
-              .filter((_, j) => j !== i)
-              .map((j) => {
-                return {
-                  id: j.id,
-                  name: j.name,
-                  chip: j.chip,
-                  balance: j.balance,
-                  isBlind: j.isBlind,
-                };
-              }),
-          },
-        })
-      );
-    });
-    this.updateGameData();
   }
 }
 class RoomController {
