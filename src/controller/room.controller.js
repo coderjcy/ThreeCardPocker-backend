@@ -50,16 +50,6 @@ class Room {
         JSON.stringify({
           code: 200,
           data: {
-            type: "notify",
-            notifyType: "success",
-            msg: "游戏开始",
-          },
-        })
-      );
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: {
             type: "toggle-room-state",
             state: "playing",
           },

@@ -33,7 +33,7 @@ class Game {
     this.players = [];
     this.deck = [];
     this.timer = undefined;
-    this.baseChip = baseChip; // 底注
+    this.baseChip = config.baseChip; // 底注
     this.chipPool = 0; // 筹码池
     this.chipMax = 50; // 单注上限
     this.currentChipMin = config.baseChip; // 当前最小可下注筹码
@@ -193,24 +193,6 @@ class Game {
     });
     this.togglePlayer();
   }
-  // addBet(value) {
-  //   // 加注可选项 5 10 20 50
-  //   // 如果当前最低下注为1,则加注最少为5
-  //   // 如果当前最低下注为5,则加注最少为10
-  //   // 如果当前最低下注为10,则加注最少为20
-  //   // 如果当前最低下注为20,则加注最少为50
-  //   if (this.currentChipMin === 1) {
-  //   }
-  //   const prePlayer = this.players[this.prePlayerIndex];
-  //   const player = this.players[this.currentPlayerIndex];
-  //   const chip =
-  //     prePlayer?.isBlind && !player.isBlind ? this.currentChipMin * 2 + 5 : this.currentChipMin + 5;
-
-  //   player.chip += chip;
-  //   this.chipPool += chip;
-  //   this.currentChipMin = chip;
-  //   this.togglePlayer();
-  // }
 
   // 跟注
   followBet() {
@@ -240,7 +222,7 @@ class Game {
 
     player.chip += chip;
     this.chipPool += chip;
-    // this.currentChipMin = value;
+    this.currentChipMin = chip;
     this.players.forEach((player) => {
       player.ws.send(
         JSON.stringify({
@@ -329,29 +311,29 @@ class Game {
             chipPool: this.chipPool,
             prePlayerId: this.players[this.prePlayerIndex]?.id,
             self: {
-              id: this.players[i].id,
-              name: this.players[i].name,
-              chip: this.players[i].chip,
-              balance: this.players[i].balance,
-              isBlind: this.players[i].isBlind,
-              isAbandon: this.players[i].isAbandon,
-              cards: this.players[i].cards,
-              avatar: this.players[i].avatar,
-              cardsType: this.players[i].cardsType,
+              id: player.id,
+              name: player.name,
+              chip: player.chip,
+              balance: player.balance,
+              isBlind: player.isBlind,
+              isAbandon: player.isAbandon,
+              cards: player.cards,
+              avatar: player.avatar,
+              cardsType: player.cardsType,
             },
             other: this.players
-              .filter((_, j) => j !== i)
-              .map((j) => {
+              .filter((i) => i.id !== player.id)
+              .map((i) => {
                 return {
-                  id: j.id,
-                  name: j.name,
-                  chip: j.chip,
-                  balance: j.balance,
-                  isBlind: j.isBlind,
-                  isAbandon: j.isAbandon,
-                  avatar: j.avatar,
-                  cards: j.cards,
-                  cardsType: j.cardsType,
+                  id: i.id,
+                  name: i.name,
+                  chip: i.chip,
+                  balance: i.balance,
+                  isBlind: i.isBlind,
+                  isAbandon: i.isAbandon,
+                  avatar: i.avatar,
+                  cards: i.cards,
+                  cardsType: i.cardsType,
                 };
               }),
           },
@@ -366,7 +348,7 @@ class Game {
       );
       const balance = player.isAbandon
         ? player.balance - player.chip
-        : player.balance + this.chipPool;
+        : player.balance + this.chipPool - player.chip;
       userService.updateBalanceByUserId(player.id, balance);
     });
   }
