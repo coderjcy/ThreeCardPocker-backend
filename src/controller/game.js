@@ -34,7 +34,7 @@ class Game {
     this.deck = [];
     this.timer = undefined;
     this.baseChip = config.baseChip; // 底注
-    this.chipPool = 0; // 筹码池
+    this.chipPool = config.baseChip * config.playerNum; // 筹码池
     this.chipMax = 50; // 单注上限
     this.currentChipMin = config.baseChip; // 当前最小可下注筹码
     this.roundCount = config.roundCount * config.playerNum; // 轮数
@@ -302,44 +302,8 @@ class Game {
    * @description 结算玩家筹码，并且通知游戏结束
    */
   settleAccounts() {
+    this.updateGameData();
     this.players.forEach((player) => {
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: {
-            type: "update-game-data",
-            chipPool: this.chipPool,
-            prePlayerId: this.players[this.prePlayerIndex]?.id,
-            self: {
-              id: player.id,
-              name: player.name,
-              chip: player.chip,
-              balance: player.balance,
-              isBlind: player.isBlind,
-              isAbandon: player.isAbandon,
-              cards: player.cards,
-              avatar: player.avatar,
-              cardsType: player.cardsType,
-            },
-            other: this.players
-              .filter((i) => i.id !== player.id)
-              .map((i) => {
-                return {
-                  id: i.id,
-                  name: i.name,
-                  chip: i.chip,
-                  balance: i.balance,
-                  isBlind: i.isBlind,
-                  isAbandon: i.isAbandon,
-                  avatar: i.avatar,
-                  cards: i.cards,
-                  cardsType: i.cardsType,
-                };
-              }),
-          },
-        })
-      );
-
       player.ws.send(
         JSON.stringify({
           code: 200,
@@ -382,7 +346,10 @@ class Game {
   startCountdownTimer(curPlayer) {
     curPlayer.remain = 30;
     this.timer = setInterval(() => {
-      if (curPlayer.remain < 0) this.abandonBet();
+      if (curPlayer.remain < 0) {
+        this.abandonBet();
+        this.updateGameData();
+      }
       this.players.forEach((player) => {
         player.ws.send(
           JSON.stringify({
@@ -408,6 +375,47 @@ class Game {
     clearInterval(this.timer);
     this.timer = undefined;
     this.players[this.currentPlayerIndex].remain = -1;
+  }
+
+  updateGameData() {
+    this.players.forEach((player) => {
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "update-game-data",
+            chipPool: this.chipPool,
+            prePlayerId: this.players[this.prePlayerIndex]?.id,
+            self: {
+              id: player.id,
+              name: player.name,
+              chip: player.chip,
+              balance: player.balance,
+              isBlind: player.isBlind,
+              isAbandon: player.isAbandon,
+              cards: player.cards,
+              avatar: player.avatar,
+              cardsType: player.cardsType,
+            },
+            other: this.players
+              .filter((i) => i.id !== player.id)
+              .map((i) => {
+                return {
+                  id: i.id,
+                  name: i.name,
+                  chip: i.chip,
+                  balance: i.balance,
+                  isBlind: i.isBlind,
+                  isAbandon: i.isAbandon,
+                  avatar: i.avatar,
+                  cards: i.cards,
+                  cardsType: i.cardsType,
+                };
+              }),
+          },
+        })
+      );
+    });
   }
 }
 
