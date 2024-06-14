@@ -36,6 +36,7 @@ class UserService {
   async updateBalanceByUserId(userId, balance) {
     const statement = `UPDATE user SET balance = ? WHERE id = ?;`;
     const res = await connection.execute(statement, [balance, userId]);
+
     return res[0][0];
   }
 }

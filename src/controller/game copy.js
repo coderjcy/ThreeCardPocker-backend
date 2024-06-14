@@ -190,10 +190,8 @@ class Game {
         })
       );
     });
-
     this.cancelCountdownTimer();
     this.startCountdownTimer(player);
-    this.updateGameData();
   }
 
   // 加注
@@ -221,7 +219,6 @@ class Game {
       );
     });
     this.togglePlayer();
-    this.updateGameData();
   }
 
   // 跟注
@@ -266,7 +263,6 @@ class Game {
       );
     });
     this.togglePlayer();
-    this.updateGameData();
   }
 
   // 弃牌
@@ -283,7 +279,6 @@ class Game {
       );
     });
     this.checkGameOver();
-    this.updateGameData();
   }
 
   /**
@@ -303,7 +298,6 @@ class Game {
       player.isAbandon = true;
     }
     this.checkGameOver();
-    this.updateGameData();
 
     return competitor;
   }
@@ -360,11 +354,9 @@ class Game {
         ? player.balance - player.chip
         : player.balance + this.chipPool - player.chip;
       const promise = userService.updateBalanceByUserId(player.id, balance);
-
       promises.push(promise);
     });
-    Promise.all(promises).then((res) => {
-      console.log(`output->res`, res);
+    Promise.all(promises).then(() => {
       this.notifyGameOver();
     });
   }
@@ -400,7 +392,7 @@ class Game {
     this.timer = setInterval(() => {
       if (curPlayer.remain < 0) {
         this.abandonBet();
-        // this.updateGameData();
+        this.updateGameData();
       }
       this.players.forEach((player) => {
         player.ws.send(
@@ -437,6 +429,7 @@ class Game {
           data: {
             type: "update-game-data",
             chipPool: this.chipPool,
+            // prePlayerId: this.players[this.prePlayerIndex]?.id,
             self: {
               id: player.id,
               name: player.name,

@@ -55,20 +55,49 @@ class Room {
           },
         })
       );
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "update-game-data",
+            self: {
+              id: this.game.players[i].id,
+              name: this.game.players[i].name,
+              chip: this.game.players[i].chip,
+              balance: this.game.players[i].balance,
+              isBlind: this.game.players[i].isBlind,
+              cards: this.game.players[i].isBlind ? this.game.players[i].cards : [],
+            },
+            other: this.game.players
+              .filter((_, j) => j !== i)
+              .map((j) => {
+                return {
+                  id: j.id,
+                  name: j.name,
+                  chip: j.chip,
+                  balance: j.balance,
+                  isBlind: j.isBlind,
+                };
+              }),
+          },
+        })
+      );
     });
-    // this.updateGameData();
+    this.updateGameData();
     this.state = "playing";
   }
   async addPlayer(userInfo) {
+    const isCreator = userInfo.id === this.creatorId;
     const { balance, avatar } = await userService.queryUserInfo("id", userInfo.id);
     const player = {
       id: userInfo.id,
       name: userInfo.nickname,
       balance,
       avatar,
-      isReady: false,
+      isReady: isCreator ? true : false,
       ws: userInfo.ws,
-      // state:'win'   // win lose abandon ready waiting palying
+
+      // state: "ready", // ready/pending/abandon
     };
     player.ws.on("close", () => {
       const index = this.playerList.findIndex((item) => item.id === player.id);
@@ -94,15 +123,52 @@ class Room {
     });
 
     this.updatePlayerState();
-
-    this.handleMessage(player);
+    if (isCreator) {
+      userInfo.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "is-creator",
+            isCreator: true,
+          },
+        })
+      );
+    }
+    this.handleMessage(player, isCreator);
   }
-  handleMessage(player) {
+  handleMessage(player, isCreator) {
     player.ws.on("message", (data) => {
       data = JSON.parse(data);
-
+      // 房主开始游戏
+      if (data.key === "start-game" && isCreator) {
+        if (this.playerList.length < this.playerMax) {
+          player.ws.send(
+            JSON.stringify({
+              code: 200,
+              data: {
+                type: "notify",
+                notifyType: "warning",
+                msg: "房间人数未满",
+              },
+            })
+          );
+        } else if (!this.playerList.every((i) => i.isReady)) {
+          player.ws.send(
+            JSON.stringify({
+              code: 200,
+              data: {
+                type: "notify",
+                notifyType: "warning",
+                msg: "有玩家未准备",
+              },
+            })
+          );
+        } else {
+          this.startGame();
+        }
+      }
       // 切换准备状态
-      if (data.key === "toggle-is-ready") {
+      else if (data.key === "toggle-is-ready") {
         player.isReady = !player.isReady;
         this.chattingRecords.push({
           type: "system",
@@ -119,15 +185,12 @@ class Room {
             },
           })
         );
+        // this.updatePlayerState();
         this.updatePlayerState();
-
-        if (this.playerList.every((i) => i.isReady) && this.playerList.length === this.playerMax) {
-          this.startGame();
-        }
       }
       // 玩家发言
       else if (data.key === "player-message") {
-        // player.isReady = !player.isReady;
+        player.isReady = !player.isReady;
         this.chattingRecords.push({
           type: "player",
           title: player.name,
@@ -138,17 +201,17 @@ class Room {
       // 跟注
       else if (data.key === "follow-bet") {
         this.game.followBet();
-        // this.updateGameData();
+        this.updateGameData();
       }
       // 下注
       else if (data.key === "add-bet") {
         this.game.addBet(data.chip);
-        // this.updateGameData();
+        this.updateGameData();
       }
       // 放弃
       else if (data.key === "abandon-bet") {
         this.game.abandonBet();
-        // this.updateGameData();
+        this.updateGameData();
       }
       // 比牌
       else if (data.key === "compare-pocker") {
@@ -167,12 +230,12 @@ class Room {
             },
           })
         );
-        // this.updateGameData();
+        this.updateGameData();
       }
       // 看牌
       else if (data.key === "show-pocker") {
         this.game.showPocker();
-        // this.updateGameData();
+        this.updateGameData();
       }
     });
   }
@@ -201,6 +264,7 @@ class Room {
             type: "update-game-data",
             chipPool: this.game.chipPool,
             currentChipMin: this.game.currentChipMin,
+            // prePlayerId: this.game.players[this.game.prePlayerIndex]?.id,
             self: {
               id: this.game.players[i].id,
               name: this.game.players[i].name,
@@ -257,6 +321,14 @@ class RoomController {
       data: roomList,
     };
   }
+  // 获取房间信息
+  async info(ctx, next) {
+    console.log(`output->ctx`, ctx);
+    // ctx.body = {
+    //   code: 200,
+    //   data: roomList,
+    // };
+  }
   // 创建房间
   async create(ctx, next) {
     const roomInfo = roomList.find((i) => i.creatorId === ctx.userInfo.id);
@@ -281,6 +353,7 @@ class RoomController {
       message: "创建成功",
     };
   }
+
   // 加入房间
   join(userInfo, roomId) {
     const roomInfo = roomList.find((i) => i.id === roomId);
