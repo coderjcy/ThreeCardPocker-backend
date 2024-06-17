@@ -39,13 +39,15 @@ class Room {
   }
   // 开始游戏
   startGame() {
+    this.state = "playing";
+
     this.game = new Game({
       playerNum: this.playerMax,
       baseChip: this.baseChip,
       roundCount: this.roundCount,
     });
     this.game.start(this.playerList);
-    this.playerList.forEach((player, i) => {
+    this.playerList.forEach((player) => {
       player.ws.send(
         JSON.stringify({
           code: 200,
@@ -56,8 +58,7 @@ class Room {
         })
       );
     });
-    // this.updateGameData();
-    this.state = "playing";
+    this.game.updateGameData();
   }
   async addPlayer(userInfo) {
     const { balance, avatar } = await userService.queryUserInfo("id", userInfo.id);
@@ -68,7 +69,6 @@ class Room {
       avatar,
       isReady: false,
       ws: userInfo.ws,
-      // state:'win'   // win lose abandon ready waiting palying
     };
     player.ws.on("close", () => {
       const index = this.playerList.findIndex((item) => item.id === player.id);
@@ -93,6 +93,7 @@ class Room {
       time: new Date().getTime(),
     });
 
+    // 通告玩家进入房间
     this.updatePlayerState();
 
     this.handleMessage(player);
@@ -110,24 +111,12 @@ class Room {
           content: player.name + (player.isReady ? "已准备" : "取消了准备"),
           time: new Date().getTime(),
         });
-        player.ws.send(
-          JSON.stringify({
-            code: 200,
-            data: {
-              type: "toggle-is-ready",
-              isReady: player.isReady,
-            },
-          })
-        );
         this.updatePlayerState();
-
-        if (this.playerList.every((i) => i.isReady) && this.playerList.length === this.playerMax) {
+        if (this.playerList.every((i) => i.isReady) && this.playerList.length === this.playerMax)
           this.startGame();
-        }
       }
       // 玩家发言
       else if (data.key === "player-message") {
-        // player.isReady = !player.isReady;
         this.chattingRecords.push({
           type: "player",
           title: player.name,
@@ -138,41 +127,22 @@ class Room {
       // 跟注
       else if (data.key === "follow-bet") {
         this.game.followBet();
-        // this.updateGameData();
       }
       // 下注
       else if (data.key === "add-bet") {
         this.game.addBet(data.chip);
-        // this.updateGameData();
       }
       // 放弃
       else if (data.key === "abandon-bet") {
         this.game.abandonBet();
-        // this.updateGameData();
       }
       // 比牌
       else if (data.key === "compare-pocker") {
-        const competitor = this.game.comparePocker(data.playerId);
-        player.ws.send(
-          JSON.stringify({
-            code: 200,
-            data: {
-              type: "compare-pocker",
-              competitor: {
-                id: competitor.id,
-                cards: competitor.cards,
-                score: competitor.score,
-                cardsType: competitor.cardsType,
-              },
-            },
-          })
-        );
-        // this.updateGameData();
+        this.game.comparePocker(data.playerId);
       }
       // 看牌
       else if (data.key === "show-pocker") {
         this.game.showPocker();
-        // this.updateGameData();
       }
     });
   }
@@ -187,43 +157,6 @@ class Room {
             currentChipMin: 1,
             self: player,
             other: this.playerList.filter((i) => i.id !== player.id),
-          },
-        })
-      );
-    });
-  }
-  updateGameData() {
-    this.playerList.forEach((player, i) => {
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: {
-            type: "update-game-data",
-            chipPool: this.game.chipPool,
-            currentChipMin: this.game.currentChipMin,
-            self: {
-              id: this.game.players[i].id,
-              name: this.game.players[i].name,
-              chip: this.game.players[i].chip,
-              balance: this.game.players[i].balance,
-              isBlind: this.game.players[i].isBlind,
-              isAbandon: this.game.players[i].isAbandon,
-              cards: this.game.players[i].isBlind ? [] : this.game.players[i].cards,
-              avatar: this.game.players[i].avatar,
-            },
-            other: this.game.players
-              .filter((_, j) => j !== i)
-              .map((j) => {
-                return {
-                  id: j.id,
-                  name: j.name,
-                  chip: j.chip,
-                  balance: j.balance,
-                  isBlind: j.isBlind,
-                  isAbandon: j.isAbandon,
-                  avatar: j.avatar,
-                };
-              }),
           },
         })
       );

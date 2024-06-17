@@ -57,16 +57,17 @@ class Game {
       for (let j = 1; j <= 3; j++) cards.push(this.randomCard());
       const { score, type } = this.computeScore(cards);
       const data = {
-        id: player.id,
-        name: player.name,
-        avatar: player.avatar,
-        cards,
+        id: player.id, // 玩家id
+        name: player.name, // 昵称
+        avatar: player.avatar, // 头像
+        cards, // 牌
         score, // 牌型对应分数
         isBlind: true, // 是否看牌
-        isAbandon: false, // 是否放弃
         cardsType: type, // 牌型
         chip: this.baseChip, // 下注的筹码
         balance: player.balance, // 剩余的筹码
+        competitor: [], // 进行比牌的对手id
+        state: "playing", // 状态 win lose abandon ready waiting playing
         ws: player.ws,
       };
       Object.defineProperty(data, "ws", {
@@ -271,7 +272,7 @@ class Game {
 
   // 弃牌
   abandonBet() {
-    this.players[this.currentPlayerIndex].isAbandon = true;
+    this.players[this.currentPlayerIndex].state = "abandon";
     this.players.forEach((player) => {
       player.ws.send(
         JSON.stringify({
@@ -293,29 +294,25 @@ class Game {
   comparePocker(id) {
     const player = this.players[this.currentPlayerIndex];
     const competitor = this.players.find((i) => i.id === id);
-    // player.chip = player.chip * 2;
-    // this.chipPool += player.chip;
-    if (player.score > competitor.score) {
-      // player 赢
-      competitor.isAbandon = true;
-    } else {
-      // player 输
-      player.isAbandon = true;
-    }
+    player.competitor.push(competitor.id);
+    competitor.competitor.push(player.id);
+
+    if (player.score > competitor.score) competitor.competitor = "lose";
+    else player.state = "lose";
+
     this.checkGameOver();
     this.updateGameData();
-
-    return competitor;
   }
 
   /**
    * @description 判断游戏是否结束
    */
   checkGameOver() {
-    const existPlayer = this.players.filter((i) => !i.isAbandon);
+    const existPlayer = this.players.filter((i) => i.state === "playing");
 
     // 如果只剩余一人,表示游戏结束
     if (existPlayer.length === 1) {
+      existPlayer.state = "win";
       this.cancelCountdownTimer();
       this.settleAccounts();
     } else {
@@ -330,13 +327,14 @@ class Game {
   computeWinner() {
     let winner = null;
     this.players.forEach((player) => {
-      if (!player.isAbandon) return;
+      if (player.state !== "playing") return;
       else if (!winner) winner = player;
       else if (player.score > winner.score) {
-        winner.isAbandon = true;
+        winner.state = "lose";
         winner = player;
       }
     });
+    winner.state = "win";
     this.settleAccounts(winner.id);
     this.winnerId = winner.id;
   }
@@ -356,9 +354,10 @@ class Game {
   settleAccounts() {
     const promises = [];
     this.players.forEach((player) => {
-      const balance = player.isAbandon
-        ? player.balance - player.chip
-        : player.balance + this.chipPool - player.chip;
+      const balance =
+        player.state === "win"
+          ? player.balance + this.chipPool - player.chip
+          : player.balance - player.chip;
       const promise = userService.updateBalanceByUserId(player.id, balance);
 
       promises.push(promise);
@@ -378,7 +377,7 @@ class Game {
     this.currentRound++;
     this.cancelCountdownTimer();
     // 如果当前玩家没有弃牌，把prePlayerIndex设为currentPlayerIndex
-    if (!this.players[this.currentPlayerIndex].isAbandon) {
+    if (this.players[this.currentPlayerIndex].state === "playing") {
       this.prePlayerIndex = this.currentPlayerIndex;
     }
     // 当前玩家是最后一个人，则把currentPlayerIndex设为0
@@ -387,7 +386,7 @@ class Game {
     else this.currentPlayerIndex++;
     const player = this.players[this.currentPlayerIndex];
     // 如果下个玩家是弃牌状态，则继续切换玩家
-    if (player.isAbandon) this.togglePlayer();
+    if (player.state !== "playing") this.togglePlayer();
     // 否则开始倒计时
     else this.startCountdownTimer(player);
   }
@@ -443,10 +442,10 @@ class Game {
               chip: player.chip,
               balance: player.balance,
               isBlind: player.isBlind,
-              isAbandon: player.isAbandon,
-              cards: player.cards,
+              cards: player.isBlind ? [] : player.cards,
+              cardType: player.isBlind ? [] : player.cardsType,
               avatar: player.avatar,
-              cardsType: player.cardsType,
+              state: player.state,
             },
             other: this.players
               .filter((i) => i.id !== player.id)
@@ -457,10 +456,10 @@ class Game {
                   chip: i.chip,
                   balance: i.balance,
                   isBlind: i.isBlind,
-                  isAbandon: i.isAbandon,
                   avatar: i.avatar,
-                  cards: i.cards,
-                  cardsType: i.cardsType,
+                  cards: player.competitor.includes(i.id) ? i.cards : [],
+                  cardsType: player.competitor.includes(i.id) ? i.cardsType : [],
+                  state: i.state,
                 };
               }),
           },
