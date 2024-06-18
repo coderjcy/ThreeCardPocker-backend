@@ -297,7 +297,7 @@ class Game {
     player.competitor.push(competitor.id);
     competitor.competitor.push(player.id);
 
-    if (player.score > competitor.score) competitor.competitor = "lose";
+    if (player.score > competitor.score) competitor.state = "lose";
     else player.state = "lose";
 
     this.checkGameOver();
@@ -363,7 +363,6 @@ class Game {
       promises.push(promise);
     });
     Promise.all(promises).then((res) => {
-      console.log(`output->res`, res);
       this.notifyGameOver();
     });
   }
