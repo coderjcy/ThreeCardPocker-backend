@@ -3,22 +3,20 @@ import userService from "../service/user.service.js";
 import Game from "./game.js";
 const roomList = [];
 class Room {
-  constructor(creatorInfo) {
-    this.id = creatorInfo.id + "_" + Date.now();
-    this.name = creatorInfo.nickname + "的房间";
+  constructor(creatorInfo, config) {
+    this.id = creatorInfo.id;
     this.creatorId = creatorInfo.id;
-    this.creatorName = creatorInfo.nickname;
-    this.playerList = [];
-    this.state = "waiting"; // waiting / playing
-    this.playerMax = 3; // 最大玩家数
-    this.baseChip = 1; // 底注
-    this.roundCount = 10; // 轮数
+    // this.creatorName = creatorInfo.nickname;
+    this.name = config.roomName;
+    this.playerNumber = config.playerNumber; // 最大玩家数
+    this.baseChip = config.baseChip; // 底注
+    this.roundCount = config.roundCount; // 轮数
     this.chattingRecords = new Proxy([], {
       get: (target, prop) => {
-        const playerList = this.playerList;
+        const players = this.game.players;
         if (prop === "push") {
           return function (...args) {
-            playerList.forEach((player) => {
+            players.forEach((player) => {
               player.ws.send(
                 JSON.stringify({
                   code: 200,
@@ -35,67 +33,30 @@ class Room {
         return target[prop];
       },
     });
-    this.game = null;
-  }
-  // 开始游戏
-  startGame() {
-    this.state = "playing";
-
     this.game = new Game({
-      playerNum: this.playerMax,
-      baseChip: this.baseChip,
-      roundCount: this.roundCount,
+      playerNum: config.playerNumber,
+      baseChip: config.baseChip,
+      roundCount: config.roundCount,
     });
-    this.game.start(this.playerList);
-    this.playerList.forEach((player) => {
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: {
-            type: "toggle-room-state",
-            state: "playing",
-          },
-        })
-      );
-    });
-    this.game.updateGameData();
   }
-  async addPlayer(userInfo) {
-    const { balance, avatar } = await userService.queryUserInfo("id", userInfo.id);
-    const player = {
-      id: userInfo.id,
-      name: userInfo.nickname,
-      balance,
-      avatar,
-      isReady: false,
-      ws: userInfo.ws,
-    };
-    player.ws.on("close", () => {
-      const index = this.playerList.findIndex((item) => item.id === player.id);
-      if (index >= 0) {
-        this.playerList.splice(index, 1);
-        this.chattingRecords.push({
-          type: "system",
-          title: "系统消息",
-          content: player.name + "离开了房间",
-          time: new Date().getTime(),
-        });
-        this.updatePlayerState();
-      }
-    });
+  // 添加玩家
+  async addPlayer(userId, ws) {
+    const userInfo = await userService.queryUserInfo("id", userId);
+    const player = this.game.addPlayer(userInfo, ws);
 
-    Object.defineProperty(player, "ws", { enumerable: false });
-    this.playerList.push(player);
     this.chattingRecords.push({
       type: "system",
       title: "系统消息",
-      content: player.name + "进入了房间",
+      content: userInfo.nickname + "进入了房间",
       time: new Date().getTime(),
     });
 
-    // 通告玩家进入房间
-    this.updatePlayerState();
+    this.handleMessage(player);
+  }
 
+  // 重新连接
+  reconnection(userId, ws) {
+    const player = this.game.reconnection(userId, ws);
     this.handleMessage(player);
   }
   handleMessage(player) {
@@ -104,16 +65,20 @@ class Room {
 
       // 切换准备状态
       if (data.key === "toggle-is-ready") {
-        player.isReady = !player.isReady;
+        player.state = player.state === "ready" ? "waiting" : "ready";
         this.chattingRecords.push({
           type: "system",
           title: "系统消息",
-          content: player.name + (player.isReady ? "已准备" : "取消了准备"),
+          content: player.name + (player.state === "ready" ? "已准备" : "取消了准备"),
           time: new Date().getTime(),
         });
-        this.updatePlayerState();
-        if (this.playerList.every((i) => i.isReady) && this.playerList.length === this.playerMax)
-          this.startGame();
+        this.game.updateGameData();
+        if (
+          this.game.players.every((i) => i.state === "ready") &&
+          this.game.players.length === this.game.playerNum
+        ) {
+          this.game.start();
+        }
       }
       // 玩家发言
       else if (data.key === "player-message") {
@@ -125,60 +90,15 @@ class Room {
         });
       }
       // 跟注
-      else if (data.key === "follow-bet") {
-        this.game.followBet();
-      }
+      else if (data.key === "follow-bet") this.game.followBet();
       // 下注
-      else if (data.key === "add-bet") {
-        this.game.addBet(data.chip);
-      }
+      else if (data.key === "add-bet") this.game.addBet(data.chip);
       // 放弃
-      else if (data.key === "abandon-bet") {
-        this.game.abandonBet();
-      }
+      else if (data.key === "abandon-bet") this.game.abandonBet();
       // 比牌
-      else if (data.key === "compare-pocker") {
-        this.game.comparePocker(data.playerId);
-      }
+      else if (data.key === "compare-pocker") this.game.comparePocker(data.playerId);
       // 看牌
-      else if (data.key === "show-pocker") {
-        this.game.showPocker();
-      }
-    });
-  }
-  updatePlayerState() {
-    this.playerList.forEach((player) => {
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: {
-            type: "update-game-data",
-            chipPool: 0,
-            currentChipMin: 1,
-            self: player,
-            other: this.playerList.filter((i) => i.id !== player.id),
-          },
-        })
-      );
-    });
-  }
-  removePlayer(userInfo) {
-    const index = this.playerList.find((i) => i.id === userInfo.id);
-    const leavePlayer = this.playerList[index];
-    this.playerList.splice(index, 1);
-    this.playerList.forEach((player) => {
-      player.ws.send(leavePlayer.name + "离开了房间");
-    });
-  }
-  notify(type = "notify", message, data) {
-    this.playerList.forEach((player) => {
-      player.ws.send(
-        JSON.stringify({
-          type,
-          data,
-          message,
-        })
-      );
+      else if (data.key === "show-pocker") this.game.showPocker();
     });
   }
 }
@@ -187,7 +107,17 @@ class RoomController {
   async list(ctx, next) {
     ctx.body = {
       code: 200,
-      data: roomList,
+      data: roomList.map((i) => {
+        return {
+          id: i.id,
+          name: i.name,
+          playerNumber: i.playerNumber,
+          currentNumber: i.game.players.length,
+          baseChip: i.baseChip,
+          roundCount: i.roundCount,
+          state: i.state,
+        };
+      }),
     };
   }
   // 创建房间
@@ -204,7 +134,7 @@ class RoomController {
       };
       return;
     }
-    const room = new Room(ctx.userInfo);
+    const room = new Room(ctx.userInfo, ctx.request.body);
     roomList.push(room);
     ctx.body = {
       code: 200,
@@ -214,19 +144,48 @@ class RoomController {
       message: "创建成功",
     };
   }
+
+  async info(ctx, next) {
+    const roomId = ctx.request.params.roomId;
+    const roomInfo = roomList.find((i) => i.id == roomId);
+    ctx.body = {
+      code: 200,
+      data: {
+        id: roomInfo.id,
+        name: roomInfo.name,
+        playerNumber: roomInfo.playerNumber,
+        currentNumber: roomInfo.game.players.length,
+        baseChip: roomInfo.baseChip,
+        roundCount: roomInfo.roundCount,
+        state: roomInfo.game.state,
+      },
+    };
+  }
   // 加入房间
-  join(userInfo, roomId) {
-    const roomInfo = roomList.find((i) => i.id === roomId);
-    if (!roomInfo)
-      return userInfo.ws.send(
+  join(userId, roomId, ws) {
+    const room = roomList.find((i) => i.id == roomId);
+    if (!room)
+      return ws.send(
         JSON.stringify({
           code: -1007,
           message: errorTypes.ROOM_DOSE_NOT_EXISTS,
         })
       );
-    if (roomInfo.playerList.length === roomInfo.playerMax) 1;
+    if (room.game.players.length >= room.playerNumber) {
+      const player = room.game.players.find((i) => i.id === userId);
 
-    roomInfo.addPlayer(userInfo);
+      // 玩家已存在, 重新连接
+      if (player) return room.reconnection(userId, ws);
+
+      return ws.send(
+        JSON.stringify({
+          code: -1007,
+          message: errorTypes.ROOM_DOSE_NOT_EXISTS,
+        })
+      );
+    }
+
+    room.addPlayer(userId, ws);
   }
 }
 

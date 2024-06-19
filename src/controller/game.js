@@ -27,19 +27,20 @@ class Game {
    *  - roundCount: 轮数
    */
   constructor(config = DEFAULT_CONFIG) {
-    this.playerNum = config.playerNum;
     this.currentPlayerIndex = -1;
     this.prePlayerIndex = -1;
     this.players = [];
     this.deck = [];
     this.timer = undefined;
     this.winnerId = undefined;
-    this.baseChip = config.baseChip; // 底注
-    this.chipPool = config.baseChip * config.playerNum; // 筹码池
     this.chipMax = 50; // 单注上限
+    this.currentRound = 1;
+    this.playerNum = config.playerNum;
+    this.baseChip = config.baseChip; // 底注
+    this.chipPool = 0; // 筹码池
     this.currentChipMin = config.baseChip; // 当前最小可下注筹码
     this.roundCount = config.roundCount * config.playerNum; // 轮数
-    this.currentRound = 1;
+    this.state = "waiting"; // 状态  playing waiting
     for (const index in LABELS)
       for (const key in SUIT)
         this.deck.push({
@@ -49,34 +50,75 @@ class Game {
           value: +index,
         });
   }
+
+  addPlayer(player, ws) {
+    this.players.find((i) => i.id !== player.id);
+    const data = {
+      id: player.id, // 玩家id
+      name: player.nickname, // 昵称
+      avatar: player.avatar, // 头像
+      balance: player.balance, // 剩余的筹码
+      chip: 0, // 下注的筹码
+      state: "waiting", // 状态: win lose abandon ready waiting playing
+      online: true, // 是否在线
+      ws,
+      cards: [], // 牌
+      score: 0, // 牌型对应分数
+      isBlind: true, // 是否未看牌
+      cardsType: undefined, // 牌型
+      competitor: [], // 进行比牌的对手id
+    };
+    Object.defineProperty(data, "ws", { enumerable: false });
+    this.players.push(data);
+    ws.on("close", () => this.removePlayer(data.id));
+    this.updateGameData();
+    return data;
+  }
+
+  // 重新连接
+  reconnection(playerId, ws) {
+    const player = this.players.find((i) => i.id === playerId);
+    if (!player) return;
+    player.ws = ws;
+    player.online = true;
+    ws.on("close", () => this.removePlayer(playerId));
+    this.updateGameData();
+    return player;
+  }
+  removePlayer(id) {
+    const index = this.players.findIndex((i) => i.id === id);
+    if (index === -1) return;
+    if (this.state === "playing") this.players[index].online = false; // 掉线
+    else this.players.splice(index, 1); // 退出游戏房间
+    this.updateGameData();
+  }
   // 开始游戏
-  start(playerList) {
-    this.playerNum = playerList.length;
-    this.players = playerList.map((player) => {
+  start() {
+    this.state = "playing";
+    this.chipPool = this.playerNum * this.baseChip;
+    this.players.forEach((player) => {
       const cards = [];
       for (let j = 1; j <= 3; j++) cards.push(this.randomCard());
       const { score, type } = this.computeScore(cards);
-      const data = {
-        id: player.id, // 玩家id
-        name: player.name, // 昵称
-        avatar: player.avatar, // 头像
-        cards, // 牌
-        score, // 牌型对应分数
-        isBlind: true, // 是否看牌
-        cardsType: type, // 牌型
-        chip: this.baseChip, // 下注的筹码
-        balance: player.balance, // 剩余的筹码
-        competitor: [], // 进行比牌的对手id
-        state: "playing", // 状态 win lose abandon ready waiting playing
-        ws: player.ws,
-      };
-      Object.defineProperty(data, "ws", {
-        enumerable: false,
-      });
-      return data;
+
+      player.cards = cards;
+      player.score = score;
+      player.cardsType = type;
+      player.chip = this.baseChip;
+      player.state = "playing";
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "toggle-room-state",
+            state: "playing",
+          },
+        })
+      );
     });
     this.currentPlayerIndex = Math.floor(Math.random() * this.playerNum);
     this.startCountdownTimer(this.players[this.currentPlayerIndex]);
+    this.updateGameData();
   }
 
   // 重置游戏
@@ -292,6 +334,16 @@ class Game {
    * @description 玩家比牌
    */
   comparePocker(id) {
+    this.players.forEach((player) => {
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: {
+            type: "compare-pocker",
+          },
+        })
+      );
+    });
     const player = this.players[this.currentPlayerIndex];
     const competitor = this.players.find((i) => i.id === id);
     player.competitor.push(competitor.id);
@@ -338,7 +390,7 @@ class Game {
     this.settleAccounts(winner.id);
     this.winnerId = winner.id;
   }
-  notifyGameOver() {
+  gameOver() {
     this.players.forEach((player) => {
       player.ws.send(
         JSON.stringify({
@@ -346,7 +398,21 @@ class Game {
           data: { type: "toggle-room-state", state: "over", winnerId: this.winnerId },
         })
       );
+
+      player.state = "waiting";
+      player.chip = 0;
+      player.cards = [];
+      player.score = 0;
+      player.isBlind = true;
+      player.cardsType = undefined;
+      player.competitor = [];
     });
+    this.state = "waiting";
+    this.currentRound = 1;
+    this.chipPool = 0;
+    this.currentChipMin = this.baseChip;
+    this.winnerId = undefined;
+    this.updateGameData();
   }
   /**
    * @description 结算玩家筹码
@@ -363,7 +429,7 @@ class Game {
       promises.push(promise);
     });
     Promise.all(promises).then((res) => {
-      this.notifyGameOver();
+      this.gameOver();
     });
   }
 
@@ -396,10 +462,8 @@ class Game {
   startCountdownTimer(curPlayer) {
     curPlayer.remain = 30;
     this.timer = setInterval(() => {
-      if (curPlayer.remain < 0) {
-        this.abandonBet();
-        // this.updateGameData();
-      }
+      if (curPlayer.remain < 0) this.abandonBet();
+
       this.players.forEach((player) => {
         player.ws.send(
           JSON.stringify({
@@ -435,6 +499,8 @@ class Game {
           data: {
             type: "update-game-data",
             chipPool: this.chipPool,
+            state: this.state,
+            currentChipMin: this.currentChipMin,
             self: {
               id: player.id,
               name: player.name,

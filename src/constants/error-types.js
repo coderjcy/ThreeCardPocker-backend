@@ -5,6 +5,7 @@ const PASSWORD_IS_INCORRENT = "password_is_incorrent";
 const UNAUTHORIZATION = "UNAUTHORIZATION";
 const UNPERMISSION = "unpermission";
 const ROOM_DOSE_NOT_EXISTS = "room_dose_not_exists";
+const ROOM_DOSE_FULL = "room_dose_full";
 
 export default {
   NAME_OR_PASSWORD_IS_REQUIRED,
@@ -14,4 +15,5 @@ export default {
   UNAUTHORIZATION,
   UNPERMISSION,
   ROOM_DOSE_NOT_EXISTS,
+  ROOM_DOSE_FULL,
 };

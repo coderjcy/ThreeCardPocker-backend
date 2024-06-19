@@ -20,10 +20,10 @@ const useWebSocket = (app) => {
     const roomId = parmas.get("roomId");
     try {
       const userInfo = jwt.verify(token, PUBLIC_KEY, { algorithms: ["RS256"] });
-      userInfo.ws = ws;
       if (!roomId) roomController.create(userInfo);
-      else roomController.join(userInfo, roomId);
+      else roomController.join(userInfo.id, roomId, ws);
     } catch (err) {
+      console.log(`output->err`, err);
       ws.send(errorTypes.UNAUTHORIZATION);
     }
   });
