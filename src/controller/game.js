@@ -364,7 +364,8 @@ class Game {
 
     // 如果只剩余一人,表示游戏结束
     if (existPlayer.length === 1) {
-      existPlayer.state = "win";
+      existPlayer[0].state = "win";
+      this.winnerId = existPlayer[0].id;
       this.cancelCountdownTimer();
       this.settleAccounts();
     } else {
@@ -387,8 +388,8 @@ class Game {
       }
     });
     winner.state = "win";
-    this.settleAccounts(winner.id);
     this.winnerId = winner.id;
+    this.settleAccounts();
   }
   gameOver() {
     this.players.forEach((player) => {
@@ -424,6 +425,7 @@ class Game {
         player.state === "win"
           ? player.balance + this.chipPool - player.chip
           : player.balance - player.chip;
+      player.balance = balance;
       const promise = userService.updateBalanceByUserId(player.id, balance);
 
       promises.push(promise);

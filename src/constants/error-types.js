@@ -6,6 +6,8 @@ const UNAUTHORIZATION = "UNAUTHORIZATION";
 const UNPERMISSION = "unpermission";
 const ROOM_DOSE_NOT_EXISTS = "room_dose_not_exists";
 const ROOM_DOSE_FULL = "room_dose_full";
+const ROOM_DOSE_PLAYING = "room_dose_playing";
+const DOSE_NOT_CREATOR = "dose_not_creator";
 
 export default {
   NAME_OR_PASSWORD_IS_REQUIRED,
@@ -16,4 +18,6 @@ export default {
   UNPERMISSION,
   ROOM_DOSE_NOT_EXISTS,
   ROOM_DOSE_FULL,
+  ROOM_DOSE_PLAYING,
+  DOSE_NOT_CREATOR,
 };

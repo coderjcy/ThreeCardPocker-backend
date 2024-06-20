@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      .wave {
+        --wave-height: 50%;
+        position: relative;
+        align-items: center;
+        height: 300px;
+        width: 300px;
+        background-color: rgb(118, 218, 255);
+        overflow: hidden;
+        border-radius: 50%;
+        box-shadow: inset 0px -10px 50px #000;
+        &:before,
+        &:after {
+          content: "";
+          position: absolute;
+          left: 50%;
+          min-width: 300%;
+          min-height: 300%;
+          background-color: #fff;
+          animation: rotate 10s linear infinite;
+        }
+
+        &:before {
+          bottom: var(--wave-height);
+          border-radius: 45%;
+        }
+        &:after {
+          bottom: calc(var(--wave-height) - 3%);
+          opacity: 0.5;
+          border-radius: 49%;
+        }
+      }
+      @keyframes rotate {
+        0% {
+          transform: translate(-50%, 0) rotateZ(0deg);
+        }
+        50% {
+          transform: translate(-50%, -2%) rotateZ(180deg);
+        }
+        100% {
+          transform: translate(-50%, 0%) rotateZ(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wave"></div>
+  </body>
+</html>

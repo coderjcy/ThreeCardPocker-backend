@@ -34,6 +34,14 @@ const errorHandler = (err, ctx) => {
       code = -1008;
       message = "房间人数已满";
       break;
+    case errorTypes.ROOM_DOSE_PLAYING:
+      code = -1009;
+      message = "房间正在游戏中,无法解散";
+      break;
+    case errorTypes.DOSE_NOT_CREATOR:
+      code = -1010;
+      message = "您不是房主,无法解散";
+      break;
     default:
       code = -1000;
       message = "NOT FOUND";

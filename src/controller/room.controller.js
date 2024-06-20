@@ -187,6 +187,23 @@ class RoomController {
 
     room.addPlayer(userId, ws);
   }
+
+  // 解散房间
+  dissolve(ctx, next) {
+    const roomId = ctx.request.body.roomId;
+    const index = roomList.findIndex((i) => i.id == roomId);
+    if (index === -1) return ctx.app.emit("error", errorTypes.ROOM_DOSE_NOT_EXISTS, ctx);
+    if (ctx.userInfo.id != roomList[index].creatorId)
+      return ctx.app.emit("error", errorTypes.DOSE_NOT_CREATOR, ctx);
+    if (roomList[index].game.state === "playing")
+      return ctx.app.emit("error", errorTypes.ROOM_DOSE_PLAYING, ctx);
+
+    roomList.splice(index, 1);
+    ctx.body = {
+      code: 200,
+      message: "房间解散成功",
+    };
+  }
 }
 
 export default new RoomController();
