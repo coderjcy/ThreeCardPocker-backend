@@ -42,6 +42,26 @@ const errorHandler = (err, ctx) => {
       code = -1010;
       message = "您不是房主,无法解散";
       break;
+    case errorTypes.EMAIL_ALREADY_EXISTS:
+      code = -1011;
+      message = "该邮箱已被其他账号绑定~";
+      break;
+    case errorTypes.EMAIL_IS_REQUIRED:
+      code = -1012;
+      message = "邮箱不能为空~";
+      break;
+    case errorTypes.EMAIL_DOSE_NOT_ASSOCIATED:
+      code = -1013;
+      message = "邮箱没有进行注册~";
+      break;
+    case errorTypes.FAILED_TO_SEND_VERIFY_CODE:
+      code = -1014;
+      message = "验证码发送失败~";
+      break;
+    case errorTypes.VERIFY_CODE_IS_WRONG:
+      code = -1014;
+      message = "验证码错误~";
+      break;
     default:
       code = -1000;
       message = "NOT FOUND";

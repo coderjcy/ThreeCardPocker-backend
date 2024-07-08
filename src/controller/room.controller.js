@@ -96,9 +96,9 @@ class Room {
       // 放弃
       else if (data.key === "abandon-bet") this.game.abandonBet();
       // 比牌
-      else if (data.key === "compare-pocker") this.game.comparePocker(data.playerId);
+      else if (data.key === "compare-poker") this.game.comparePoker(data.playerId);
       // 看牌
-      else if (data.key === "show-pocker") this.game.showPocker();
+      else if (data.key === "show-poker") this.game.showPoker();
     });
   }
 }
@@ -180,7 +180,7 @@ class RoomController {
       return ws.send(
         JSON.stringify({
           code: -1007,
-          message: errorTypes.ROOM_DOSE_NOT_EXISTS,
+          message: errorTypes.ROOM_DOSE_FULL,
         })
       );
     }

@@ -36,7 +36,18 @@ class UserService {
   async updateBalanceByUserId(userId, balance) {
     const statement = `UPDATE user SET balance = ? WHERE id = ?;`;
     const res = await connection.execute(statement, [balance, userId]);
+    return res[0][0];
+  }
 
+  async create(username, password, email) {
+    const statement = `INSERT INTO user (username,nickname,password,email) values(?,?,?,?);`;
+    const res = await connection.execute(statement, [username, username, password, email]);
+    return res[0][0];
+  }
+
+  async update(userId, key, value) {
+    const statement = `UPDATE user SET ${key} = ? WHERE id = ?;`;
+    const res = await connection.execute(statement, [value, userId]);
     return res[0][0];
   }
 }

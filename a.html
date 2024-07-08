@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      body {
+        background: #fff;
+        text-align: center;
+      }
+
+      p {
+        text-align: center;
+        font-size: 20vmin;
+        line-height: 40vmin;
+        color: #fff;
+        cursor: pointer;
+      }
+
+      .pink {
+        filter: brightness(105%);
+        --shadow-color: #f56c6c;
+        /* --shadow-color: #67c23a; */
+        --text-color: #fff;
+        color: var(--text-color);
+        text-shadow: 0 0 5px var(--text-color), 0 0 10px var(--text-color),
+          0 0 15px var(--text-color), 0 0 20px var(--shadow-color), 0 0 35px var(--shadow-color),
+          0 0 40px var(--shadow-color), 0 0 50px var(--shadow-color), 0 0 75px var(--shadow-color);
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <p class="pink">PINK</p>
+    </div>
+  </body>
+</html>

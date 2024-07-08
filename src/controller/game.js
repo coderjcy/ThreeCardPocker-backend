@@ -32,7 +32,6 @@ class Game {
     this.players = [];
     this.deck = [];
     this.timer = undefined;
-    this.winnerId = undefined;
     this.chipMax = 50; // 单注上限
     this.currentRound = 1;
     this.playerNum = config.playerNum;
@@ -40,7 +39,7 @@ class Game {
     this.chipPool = 0; // 筹码池
     this.currentChipMin = config.baseChip; // 当前最小可下注筹码
     this.roundCount = config.roundCount * config.playerNum; // 轮数
-    this.state = "waiting"; // 状态  playing waiting
+    this.state = "waiting"; // 状态  playing waiting over
     for (const index in LABELS)
       for (const key in SUIT)
         this.deck.push({
@@ -124,7 +123,6 @@ class Game {
   // 重置游戏
   reset() {
     this.currentRound = 1;
-    this.winnerId = undefined;
     this.chipPool = 0;
     this.deck = [];
     for (const index in LABELS)
@@ -150,10 +148,16 @@ class Game {
     const suitSet = new Set();
     const labelSet = new Set();
     let isStraight = false;
-    for (const card of cards) {
-      suitSet.add(card.suitLabel);
-      labelSet.add(card.label);
+    try {
+      for (const card of cards) {
+        suitSet.add(card.suitLabel);
+        labelSet.add(card.label);
+      }
+    } catch (error) {
+      console.log(`output->cards`, cards);
+      throw Error("error");
     }
+
     if (cards[2].value - cards[1].value === 1 && cards[1].value - cards[0].value === 1)
       isStraight = true;
     //  开始计算牌型分数
@@ -220,7 +224,7 @@ class Game {
   }
 
   // 看牌
-  showPocker() {
+  showPoker() {
     const player = this.players[this.currentPlayerIndex];
     player.isBlind = false;
     this.players.forEach((player) => {
@@ -228,7 +232,7 @@ class Game {
         JSON.stringify({
           code: 200,
           data: {
-            type: "show-pocker",
+            type: "show-poker",
           },
         })
       );
@@ -326,20 +330,19 @@ class Game {
       );
     });
     this.checkGameOver();
-    this.updateGameData();
   }
 
   /**
    * @param  id 玩家id
    * @description 玩家比牌
    */
-  comparePocker(id) {
+  comparePoker(id) {
     this.players.forEach((player) => {
       player.ws.send(
         JSON.stringify({
           code: 200,
           data: {
-            type: "compare-pocker",
+            type: "compare-poker",
           },
         })
       );
@@ -353,7 +356,6 @@ class Game {
     else player.state = "lose";
 
     this.checkGameOver();
-    this.updateGameData();
   }
 
   /**
@@ -365,11 +367,11 @@ class Game {
     // 如果只剩余一人,表示游戏结束
     if (existPlayer.length === 1) {
       existPlayer[0].state = "win";
-      this.winnerId = existPlayer[0].id;
       this.cancelCountdownTimer();
       this.settleAccounts();
     } else {
       this.togglePlayer();
+      this.updateGameData();
     }
   }
 
@@ -388,18 +390,14 @@ class Game {
       }
     });
     winner.state = "win";
-    this.winnerId = winner.id;
     this.settleAccounts();
   }
-  gameOver() {
-    this.players.forEach((player) => {
-      player.ws.send(
-        JSON.stringify({
-          code: 200,
-          data: { type: "toggle-room-state", state: "over", winnerId: this.winnerId },
-        })
-      );
+  async gameOver(winnerId) {
+    this.changeRoomState("over", winnerId);
+    this.updateGameData();
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
+    this.players.forEach((player) => {
       player.state = "waiting";
       player.chip = 0;
       player.cards = [];
@@ -408,11 +406,11 @@ class Game {
       player.cardsType = undefined;
       player.competitor = [];
     });
-    this.state = "waiting";
+    this.changeRoomState("waiting", winnerId);
+
     this.currentRound = 1;
     this.chipPool = 0;
     this.currentChipMin = this.baseChip;
-    this.winnerId = undefined;
     this.updateGameData();
   }
   /**
@@ -420,21 +418,31 @@ class Game {
    */
   settleAccounts() {
     const promises = [];
+    let winnerId;
     this.players.forEach((player) => {
+      if (player.state === "win") winnerId = player.id;
       const balance =
         player.state === "win"
           ? player.balance + this.chipPool - player.chip
           : player.balance - player.chip;
       player.balance = balance;
       const promise = userService.updateBalanceByUserId(player.id, balance);
-
       promises.push(promise);
     });
-    Promise.all(promises).then((res) => {
-      this.gameOver();
+
+    Promise.all(promises).then(() => this.gameOver(winnerId));
+  }
+  changeRoomState(state, winnerId) {
+    this.state = state;
+    this.players.forEach((player) => {
+      player.ws.send(
+        JSON.stringify({
+          code: 200,
+          data: { type: "toggle-room-state", state, winnerId },
+        })
+      );
     });
   }
-
   /**
    * @description 切换用户回合
    */
@@ -509,8 +517,8 @@ class Game {
               chip: player.chip,
               balance: player.balance,
               isBlind: player.isBlind,
-              cards: player.isBlind ? [] : player.cards,
-              cardType: player.isBlind ? [] : player.cardsType,
+              cards: !player.isBlind || this.state === "over" ? player.cards : [],
+              cardsType: !player.isBlind || this.state === "over" ? player.cardsType : [],
               avatar: player.avatar,
               state: player.state,
             },
@@ -524,8 +532,9 @@ class Game {
                   balance: i.balance,
                   isBlind: i.isBlind,
                   avatar: i.avatar,
-                  cards: player.competitor.includes(i.id) ? i.cards : [],
-                  cardsType: player.competitor.includes(i.id) ? i.cardsType : [],
+                  cards: player.competitor.includes(i.id) || this.state === "over" ? i.cards : [],
+                  cardsType:
+                    player.competitor.includes(i.id) || this.state === "over" ? i.cardsType : [],
                   state: i.state,
                 };
               }),
