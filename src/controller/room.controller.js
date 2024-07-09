@@ -173,7 +173,7 @@ class RoomController {
       );
     if (room.game.players.length >= room.playerNumber) {
       const player = room.game.players.find((i) => i.id === userId);
-
+      console.log(`output->111,player`, 111, player);
       // 玩家已存在, 重新连接
       if (player) return room.reconnection(userId, ws);
 

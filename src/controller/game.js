@@ -17,6 +17,15 @@ const DEFAULT_CONFIG = {
   baseChip: 1,
   roundCount: 10,
 };
+const DECK = [];
+for (const index in LABELS)
+  for (const key in SUIT)
+    DECK.push({
+      suitLabel: key,
+      suitValue: SUIT[key],
+      label: LABELS[index],
+      value: +index,
+    });
 class Game {
   /**
    *
@@ -30,7 +39,6 @@ class Game {
     this.currentPlayerIndex = -1;
     this.prePlayerIndex = -1;
     this.players = [];
-    this.deck = [];
     this.timer = undefined;
     this.chipMax = 50; // 单注上限
     this.currentRound = 1;
@@ -40,14 +48,6 @@ class Game {
     this.currentChipMin = config.baseChip; // 当前最小可下注筹码
     this.roundCount = config.roundCount * config.playerNum; // 轮数
     this.state = "waiting"; // 状态  playing waiting over
-    for (const index in LABELS)
-      for (const key in SUIT)
-        this.deck.push({
-          suitLabel: key,
-          suitValue: SUIT[key],
-          label: LABELS[index],
-          value: +index,
-        });
   }
 
   addPlayer(player, ws) {
@@ -94,6 +94,7 @@ class Game {
   // 开始游戏
   start() {
     this.state = "playing";
+    this.deck = [...DECK];
     this.chipPool = this.playerNum * this.baseChip;
     this.players.forEach((player) => {
       const cards = [];
@@ -148,16 +149,10 @@ class Game {
     const suitSet = new Set();
     const labelSet = new Set();
     let isStraight = false;
-    try {
-      for (const card of cards) {
-        suitSet.add(card.suitLabel);
-        labelSet.add(card.label);
-      }
-    } catch (error) {
-      console.log(`output->cards`, cards);
-      throw Error("error");
+    for (const card of cards) {
+      suitSet.add(card.suitLabel);
+      labelSet.add(card.label);
     }
-
     if (cards[2].value - cards[1].value === 1 && cards[1].value - cards[0].value === 1)
       isStraight = true;
     //  开始计算牌型分数
@@ -348,10 +343,20 @@ class Game {
       );
     });
     const player = this.players[this.currentPlayerIndex];
+
     const competitor = this.players.find((i) => i.id === id);
     player.competitor.push(competitor.id);
     competitor.competitor.push(player.id);
+    let chip = this.currentChipMin;
 
+    if (competitor.isBlind && !player.isBlind) {
+      if (this.currentChipMin === 1) chip = 5;
+      else if (this.currentChipMin === 5) chip = 10;
+      else if (this.currentChipMin === 10) chip = 20;
+      else if (this.currentChipMin === 20) chip = 50;
+    }
+    player.chip += chip;
+    this.chipPool += chip;
     if (player.score > competitor.score) competitor.state = "lose";
     else player.state = "lose";
 
@@ -390,6 +395,7 @@ class Game {
       }
     });
     winner.state = "win";
+    this.cancelCountdownTimer();
     this.settleAccounts();
   }
   async gameOver(winnerId) {
@@ -448,7 +454,8 @@ class Game {
    */
   togglePlayer() {
     // 回合到达31后，游戏结束，当前剩余玩家中牌型分数最大者获得胜利
-    if (this.currentRound > 30) return this.computeWinner();
+    // if (this.currentRound >= 30) return this.computeWinner();
+    if (this.currentRound >= 5) return this.computeWinner();
     this.currentRound++;
     this.cancelCountdownTimer();
     // 如果当前玩家没有弃牌，把prePlayerIndex设为currentPlayerIndex
