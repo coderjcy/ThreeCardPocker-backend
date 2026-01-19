@@ -29,10 +29,11 @@ class LoginController {
   async sendCode(ctx, next) {
     const { email, code } = ctx.request.body;
     const transporter = nodemailer.createTransport({
+      // 账号设置 安全设置 SMTP 生成授权码
       host: "smtp.qq.com",
       auth: {
         user: "coderjcy@qq.com",
-        pass: "jtoxdnbnzjavhdjf",
+        pass: "bnmacoxbjtgziijj",
       },
     });
 
@@ -43,7 +44,9 @@ class LoginController {
         subject: "炸金花 - 重置密码",
         text: `您的验证码为：${code},验证码有效期10分钟,请尽快使用`,
       })
-      .catch((err) => undefined);
+      .catch((err) => {
+        console.log("发送邮件失败:", err);
+      });
     if (sendRes) {
       await loginService.insetVerifyCodeRecord(ctx.userInfo.id, code);
       ctx.body = {

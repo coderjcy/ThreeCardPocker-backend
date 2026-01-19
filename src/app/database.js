@@ -1,10 +1,10 @@
-// 链接数据库 mysql
+// 连接接数据库 mysql
 import mysql from "mysql2";
 
 const connectionPool = mysql.createPool({
   host: "localhost",
   user: "root",
-  password: "123456",
+  password: "jcy123456",
   database: "three_card_poker",
   connectionLimit: 10,
 });

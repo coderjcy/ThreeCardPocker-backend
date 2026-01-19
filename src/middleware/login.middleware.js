@@ -7,20 +7,16 @@ import loginService from "../service/login.service.js";
 
 const verifyLogin = async (ctx, next) => {
   const { username, password } = ctx.request.body;
-  if (!username || !password)
-    return ctx.app.emit("error", errorTypes.NAME_OR_PASSWORD_IS_REQUIRED, ctx);
+  if (!username || !password) return ctx.app.emit("error", errorTypes.NAME_OR_PASSWORD_IS_REQUIRED, ctx);
   const userInfo = await userService.queryUserByUserName(username);
   if (!userInfo) return ctx.app.emit("error", errorTypes.USER_DOES_NOT_EXISTS, ctx);
-  if (md5password(password) !== userInfo.password)
-    return ctx.app.emit("error", errorTypes.PASSWORD_IS_INCORRENT, ctx);
+  if (md5password(password) !== userInfo.password) return ctx.app.emit("error", errorTypes.PASSWORD_IS_INCORRENT, ctx);
   ctx.userInfo = userInfo;
-
   await next();
 };
 const verifySignUp = async (ctx, next) => {
   const { username, password, email } = ctx.request.body;
-  if (!username || !password)
-    return ctx.app.emit("error", errorTypes.NAME_OR_PASSWORD_IS_REQUIRED, ctx);
+  if (!username || !password) return ctx.app.emit("error", errorTypes.NAME_OR_PASSWORD_IS_REQUIRED, ctx);
   if (!email) return ctx.app.emit("error", errorTypes.EMAIL_IS_REQUIRED, ctx);
   const userInfo = await userService.queryUserByUserName(username);
   if (userInfo) return ctx.app.emit("error", errorTypes.USER_ALREADY_EXISTS, ctx);
@@ -42,6 +38,7 @@ const verifyAuth = async (ctx, next) => {
     ctx.userInfo = res;
     await next();
   } catch (err) {
+    console.log("err", err);
     ctx.app.emit("error", errorTypes.UNAUTHORIZATION, ctx);
   }
 };

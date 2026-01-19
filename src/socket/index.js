@@ -15,13 +15,17 @@ const useWebSocket = (app) => {
       if (data !== "ping") return;
       ws.send(JSON.stringify("pong"));
     });
+
     const parmas = new URLSearchParams(request.url.replace("/?", "?"));
     const token = parmas.get("token");
     const roomId = parmas.get("roomId");
+    const roomCode = parmas.get("roomCode");
     try {
       const userInfo = jwt.verify(token, PUBLIC_KEY, { algorithms: ["RS256"] });
       if (!roomId) roomController.create(userInfo);
-      else roomController.join(userInfo.id, roomId, ws);
+      else {
+        roomController.join(userInfo.id, roomId, ws);
+      }
     } catch (err) {
       console.log(`output->err`, err);
       ws.send(errorTypes.UNAUTHORIZATION);

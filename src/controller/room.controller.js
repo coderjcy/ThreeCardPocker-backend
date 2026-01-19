@@ -1,13 +1,18 @@
 import errorTypes from "../constants/error-types.js";
 import userService from "../service/user.service.js";
 import Game from "./game.js";
+import { randomCode } from "../utils/random.js";
 const roomList = [];
 class Room {
   constructor(creatorInfo, config) {
-    this.id = creatorInfo.id;
-    this.creatorId = creatorInfo.id;
-    // this.creatorName = creatorInfo.nickname;
-    this.name = config.roomName;
+    this.id = randomCode(
+      6,
+      roomList.map((i) => i.code),
+    );
+    this.code = // 房间号;
+      this.creatorId = creatorInfo.id; // 创建者id
+    this.isPersonal = config.isPersonal; // 私人房间
+    this.name = config.roomName; // 房间名
     this.playerNumber = config.playerNumber; // 最大玩家数
     this.baseChip = config.baseChip; // 底注
     this.roundCount = config.roundCount; // 轮数
@@ -24,7 +29,7 @@ class Room {
                     type: "update-chatting-records",
                     chattingRecords: [...target, ...args],
                   },
-                })
+                }),
               );
             });
             return target.push(...args);
@@ -46,7 +51,7 @@ class Room {
 
     this.chattingRecords.push({
       type: "system",
-      title: "系统消息",
+      title: "系统消息：",
       content: userInfo.nickname + "进入了房间",
       time: new Date().getTime(),
     });
@@ -60,6 +65,14 @@ class Room {
     this.handleMessage(player);
   }
   handleMessage(player) {
+    player.ws.on("close", () => {
+      this.chattingRecords.push({
+        type: "system",
+        title: "系统消息：",
+        content: player.name + "退出了房间",
+        time: new Date().getTime(),
+      });
+    });
     player.ws.on("message", (data) => {
       data = JSON.parse(data);
 
@@ -68,15 +81,12 @@ class Room {
         player.state = player.state === "ready" ? "waiting" : "ready";
         this.chattingRecords.push({
           type: "system",
-          title: "系统消息",
+          title: "系统消息：",
           content: player.name + (player.state === "ready" ? "已准备" : "取消了准备"),
           time: new Date().getTime(),
         });
         this.game.updateGameData();
-        if (
-          this.game.players.every((i) => i.state === "ready") &&
-          this.game.players.length === this.game.playerNum
-        ) {
+        if (this.game.players.every((i) => i.state === "ready") && this.game.players.length === this.game.playerNum) {
           this.game.start();
         }
       }
@@ -107,17 +117,19 @@ class RoomController {
   async list(ctx, next) {
     ctx.body = {
       code: 200,
-      data: roomList.map((i) => {
-        return {
-          id: i.id,
-          name: i.name,
-          playerNumber: i.playerNumber,
-          currentNumber: i.game.players.length,
-          baseChip: i.baseChip,
-          roundCount: i.roundCount,
-          state: i.state,
-        };
-      }),
+      data: roomList
+        .filter((i) => !i.isPersonal)
+        .map((i) => {
+          return {
+            id: i.id,
+            name: i.name,
+            playerNumber: i.playerNumber,
+            currentNumber: i.game.players.length,
+            baseChip: i.baseChip,
+            roundCount: i.roundCount,
+            state: i.state,
+          };
+        }),
     };
   }
   // 创建房间
@@ -144,10 +156,29 @@ class RoomController {
       message: "创建成功",
     };
   }
-
+  // 查看房间
   async info(ctx, next) {
     const roomId = ctx.request.params.roomId;
     const roomInfo = roomList.find((i) => i.id == roomId);
+    ctx.body = {
+      code: 200,
+      data: {
+        id: roomInfo.id,
+        name: roomInfo.name,
+        creatorId: roomInfo.creatorId,
+        playerNumber: roomInfo.playerNumber,
+        currentNumber: roomInfo.game.players.length,
+        baseChip: roomInfo.baseChip,
+        roundCount: roomInfo.roundCount,
+        state: roomInfo.game.state,
+        code: roomInfo.code,
+      },
+    };
+  }
+  async infoByCode(ctx, next) {
+    const code = ctx.request.params.code;
+    const roomInfo = roomList.find((i) => i.id == code);
+    if (!roomInfo) return ctx.app.emit("error", errorTypes.ROOM_DOSE_NOT_EXISTS, ctx);
     ctx.body = {
       code: 200,
       data: {
@@ -158,6 +189,7 @@ class RoomController {
         baseChip: roomInfo.baseChip,
         roundCount: roomInfo.roundCount,
         state: roomInfo.game.state,
+        code: roomInfo.code,
       },
     };
   }
@@ -169,11 +201,10 @@ class RoomController {
         JSON.stringify({
           code: -1007,
           message: errorTypes.ROOM_DOSE_NOT_EXISTS,
-        })
+        }),
       );
     if (room.game.players.length >= room.playerNumber) {
       const player = room.game.players.find((i) => i.id === userId);
-      console.log(`output->111,player`, 111, player);
       // 玩家已存在, 重新连接
       if (player) return room.reconnection(userId, ws);
 
@@ -181,7 +212,7 @@ class RoomController {
         JSON.stringify({
           code: -1007,
           message: errorTypes.ROOM_DOSE_FULL,
-        })
+        }),
       );
     }
 
@@ -193,11 +224,12 @@ class RoomController {
     const roomId = ctx.request.body.roomId;
     const index = roomList.findIndex((i) => i.id == roomId);
     if (index === -1) return ctx.app.emit("error", errorTypes.ROOM_DOSE_NOT_EXISTS, ctx);
-    if (ctx.userInfo.id != roomList[index].creatorId)
-      return ctx.app.emit("error", errorTypes.DOSE_NOT_CREATOR, ctx);
-    if (roomList[index].game.state === "playing")
-      return ctx.app.emit("error", errorTypes.ROOM_DOSE_PLAYING, ctx);
+    if (ctx.userInfo.id != roomList[index].creatorId) return ctx.app.emit("error", errorTypes.DOSE_NOT_CREATOR, ctx);
+    if (roomList[index].game.state === "playing") return ctx.app.emit("error", errorTypes.ROOM_DOSE_PLAYING, ctx);
 
+    roomList[index].game.players.forEach((player) => {
+      player.ws.send(JSON.stringify({ code: 200, data: { type: "room-dissolve" } }));
+    });
     roomList.splice(index, 1);
     ctx.body = {
       code: 200,

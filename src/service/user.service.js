@@ -50,6 +50,12 @@ class UserService {
     const res = await connection.execute(statement, [value, userId]);
     return res[0][0];
   }
+
+  async chargeBalance(userId, balance) {
+    const statement = `UPDATE user SET balance = balance +? WHERE id =?;`;
+    const res = await connection.execute(statement, [balance, userId]);
+    return res[0][0];
+  }
 }
 
 export default new UserService();

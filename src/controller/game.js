@@ -87,7 +87,8 @@ class Game {
   removePlayer(id) {
     const index = this.players.findIndex((i) => i.id === id);
     if (index === -1) return;
-    if (this.state === "playing") this.players[index].online = false; // 掉线
+    if (this.state === "playing")
+      this.players[index].online = false; // 掉线
     else this.players.splice(index, 1); // 退出游戏房间
     this.updateGameData();
   }
@@ -113,7 +114,7 @@ class Game {
             type: "toggle-room-state",
             state: "playing",
           },
-        })
+        }),
       );
     });
     this.currentPlayerIndex = Math.floor(Math.random() * this.playerNum);
@@ -153,8 +154,7 @@ class Game {
       suitSet.add(card.suitLabel);
       labelSet.add(card.label);
     }
-    if (cards[2].value - cards[1].value === 1 && cards[1].value - cards[0].value === 1)
-      isStraight = true;
+    if (cards[2].value - cards[1].value === 1 && cards[1].value - cards[0].value === 1) isStraight = true;
     //  开始计算牌型分数
     // 1. 处理豹子(555)
     if (labelSet.size === 1) {
@@ -229,7 +229,7 @@ class Game {
           data: {
             type: "show-poker",
           },
-        })
+        }),
       );
     });
 
@@ -259,7 +259,7 @@ class Game {
             playerId,
             chip,
           },
-        })
+        }),
       );
     });
     this.togglePlayer();
@@ -271,7 +271,6 @@ class Game {
     const prePlayer = this.players[this.prePlayerIndex];
     const player = this.players[this.currentPlayerIndex];
     const playerId = player.id;
-
     const isNeedDouble = prePlayer?.isBlind && !player.isBlind;
     let chip = 0;
     switch (this.currentChipMin) {
@@ -304,7 +303,7 @@ class Game {
             playerId,
             chip,
           },
-        })
+        }),
       );
     });
     this.togglePlayer();
@@ -321,7 +320,7 @@ class Game {
           data: {
             type: "abandon-bet",
           },
-        })
+        }),
       );
     });
     this.checkGameOver();
@@ -339,7 +338,7 @@ class Game {
           data: {
             type: "compare-poker",
           },
-        })
+        }),
       );
     });
     const player = this.players[this.currentPlayerIndex];
@@ -427,10 +426,7 @@ class Game {
     let winnerId;
     this.players.forEach((player) => {
       if (player.state === "win") winnerId = player.id;
-      const balance =
-        player.state === "win"
-          ? player.balance + this.chipPool - player.chip
-          : player.balance - player.chip;
+      const balance = player.state === "win" ? player.balance + this.chipPool - player.chip : player.balance - player.chip;
       player.balance = balance;
       const promise = userService.updateBalanceByUserId(player.id, balance);
       promises.push(promise);
@@ -445,7 +441,7 @@ class Game {
         JSON.stringify({
           code: 200,
           data: { type: "toggle-room-state", state, winnerId },
-        })
+        }),
       );
     });
   }
@@ -454,8 +450,7 @@ class Game {
    */
   togglePlayer() {
     // 回合到达31后，游戏结束，当前剩余玩家中牌型分数最大者获得胜利
-    // if (this.currentRound >= 30) return this.computeWinner();
-    if (this.currentRound >= 5) return this.computeWinner();
+    if (this.currentRound >= this.roundCount) return this.computeWinner();
     this.currentRound++;
     this.cancelCountdownTimer();
     // 如果当前玩家没有弃牌，把prePlayerIndex设为currentPlayerIndex
@@ -490,7 +485,7 @@ class Game {
               remain: curPlayer.remain,
               userId: curPlayer.id,
             },
-          })
+          }),
         );
       });
       curPlayer.remain--;
@@ -540,13 +535,12 @@ class Game {
                   isBlind: i.isBlind,
                   avatar: i.avatar,
                   cards: player.competitor.includes(i.id) || this.state === "over" ? i.cards : [],
-                  cardsType:
-                    player.competitor.includes(i.id) || this.state === "over" ? i.cardsType : [],
+                  cardsType: player.competitor.includes(i.id) || this.state === "over" ? i.cardsType : [],
                   state: i.state,
                 };
               }),
           },
-        })
+        }),
       );
     });
   }
