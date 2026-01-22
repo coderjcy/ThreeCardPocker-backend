@@ -9,8 +9,8 @@ class Room {
       6,
       roomList.map((i) => i.code),
     );
-    this.code = // 房间号;
-      this.creatorId = creatorInfo.id; // 创建者id
+
+    this.creatorId = creatorInfo.id; // 创建者id
     this.isPersonal = config.isPersonal; // 私人房间
     this.name = config.roomName; // 房间名
     this.playerNumber = config.playerNumber; // 最大玩家数
@@ -127,7 +127,7 @@ class RoomController {
             currentNumber: i.game.players.length,
             baseChip: i.baseChip,
             roundCount: i.roundCount,
-            state: i.state,
+            state: i.game.state,
           };
         }),
     };
